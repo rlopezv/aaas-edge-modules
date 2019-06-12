@@ -1,0 +1,145 @@
+{
+  "$schema-template": "2.0.0",
+  "modulesContent": {
+    "$edgeAgent": {
+      "properties.desired": {
+        "schemaVersion": "1.0",
+        "runtime": {
+          "type": "docker",
+          "settings": {
+            "minDockerVersion": "v1.25",
+            "loggingOptions": "",
+            "registryCredentials": {
+              "aaascontainerregistry": {
+                "username": "$CONTAINER_REGISTRY_USERNAME_aaascontainerregistry",
+                "password": "$CONTAINER_REGISTRY_PASSWORD_aaascontainerregistry",
+                "address": "aaascontainerregistry.azurecr.io"
+              },
+              "docker": {
+                "username": "$CONTAINER_REGISTRY_USERNAME_docker",
+                "password": "$CONTAINER_REGISTRY_PASSWORD_docker",
+                "address": "docker.io"
+              }
+            }
+          }
+        },
+        "systemModules": {
+          "edgeAgent": {
+            "type": "docker",
+            "settings": {
+              "image": "mcr.microsoft.com/azureiotedge-agent:1.0",
+              "createOptions": {}
+            }
+          },
+          "edgeHub": {
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "mcr.microsoft.com/azureiotedge-hub:1.0",
+              "createOptions": {
+                "HostConfig": {
+                  "PortBindings": {
+                    "5671/tcp": [
+                      {
+                        "HostPort": "5671"
+                      }
+                    ],
+                    "8883/tcp": [
+                      {
+                        "HostPort": "8883"
+                      }
+                    ],
+                    "443/tcp": [
+                      {
+                        "HostPort": "443"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "modules": {
+          "edgenodered": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "rlopezviana/aaas-edge-nodered:0.0.2-arm32v7",
+              "createOptions": {
+                "HostConfig": {
+                  "Privileged": true,
+                  "PortBindings": {
+                    "1880/tcp": [
+                      {
+                        "HostPort": "1880"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "logmodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.logmodule}",
+              "createOptions": {}
+            }
+          },
+          "plantmodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.plantmodule}",
+              "createOptions": {}
+            }
+          },
+          "premiumplantmodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.premiumplantmodule}",
+              "createOptions": {}
+            }
+          },
+          "messagedispatchermodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.messagedispatchermodule}",
+              "createOptions": {}
+            }
+          }
+        }
+      }
+    },
+    "$edgeHub": {
+      "properties.desired": {
+        "schemaVersion": "1.0",
+        "routes": {
+          "noderedToLogModule": "FROM /messages/modules/edgenodered/outputs/* INTO BrokeredEndpoint(\"/modules/SampleModule/inputs/input1\")",
+          "logmoduleToIoTHub": "FROM /messages/modules/logmodule/outputs/* INTO $upstream",
+          "plantmoduleToIoTHub": "FROM /messages/modules/plantmodule/outputs/* INTO $upstream",
+          "premiumplantmoduleToIoTHub": "FROM /messages/modules/premiumplantmodule/outputs/* INTO $upstream",
+          "messagedispatchermoduleToIoTHub": "FROM /messages/modules/messagedispatchermodule/outputs/* INTO $upstream"
+        },
+        "storeAndForwardConfiguration": {
+          "timeToLiveSecs": 7200
+        }
+      }
+    }
+  }
+}
