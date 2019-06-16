@@ -115,7 +115,22 @@
             "restartPolicy": "always",
             "settings": {
               "image": "${MODULES.plantmodule.debug}",
-              "createOptions": {}
+              "createOptions": {
+                "ExposedPorts": {
+                  "9229/tcp": {}
+                },
+                "HostConfig": {
+                    "Privileged": true,
+                    "Binds": ["/Users/ramon/master/tfm/data:/aaas/data"],
+                  "PortBindings": {
+                    "9229/tcp": [
+                      {
+                        "HostPort": "9229"
+                      }
+                    ]
+                  }
+                }
+              }
             }
           },
           "premiumplantmodule": {
@@ -136,19 +151,9 @@
             "settings": {
               "image": "${MODULES.messagedispatchermodule.debug}",
               "createOptions": {
-                "ExposedPorts": {
-                  "9229/tcp": {}
-                },
                 "HostConfig": {
                     "Privileged": true,
-                    "Binds": ["/Users/ramon/master/tfm/data:/aaas/data"],
-                  "PortBindings": {
-                    "9229/tcp": [
-                      {
-                        "HostPort": "9229"
-                      }
-                    ]
-                  }
+                    "Binds": ["/Users/ramon/master/tfm/data:/aaas/data"]
                 }
               }
             }
@@ -160,15 +165,7 @@
       "properties.desired": {
         "schemaVersion": "1.0",
         "routes": {
-          "sensorToLogModule": "FROM /messages/modules/tempSensor/outputs/temperatureOutput INTO BrokeredEndpoint(\"/modules/logmodule/inputs/input1\")",
-          "SampleModuleToIoTHub": "FROM /messages/modules/SampleModule/outputs/* INTO $upstream",
-          "sensorToSampleModule": "FROM /messages/modules/tempSensor/outputs/temperatureOutput INTO BrokeredEndpoint(\"/modules/SampleModule/inputs/input1\")",
-          "noderedToIoTHub": "FROM /messages/modules/nodered/outputs/* INTO $upstream",
-          "noderedToSampleModule": "FROM /messages/modules/nodered/outputs/* INTO BrokeredEndpoint(\"/modules/SampleModule/inputs/input1\")",
-          "tempToRed": "FROM /messages/modules/tempSensor/outputs/* INTO BrokeredEndpoint(\"/modules/nodered/inputs/input1\")",
-          "logmoduleToIoTHub": "FROM /messages/modules/logmodule/outputs/* INTO $upstream",
-          "plantmoduleToIoTHub": "FROM /messages/modules/plantmodule/outputs/* INTO $upstream",
-          "premiumplantmoduleToIoTHub": "FROM /messages/modules/premiumplantmodule/outputs/* INTO $upstream"
+          "noderedToMessageDispatcherModule": "FROM /messages/modules/nodered/outputs/* INTO BrokeredEndpoint(\"/modules/messagedispatchermodule/inputs/input1\")"
         },
         "storeAndForwardConfiguration": {
           "timeToLiveSecs": 7200

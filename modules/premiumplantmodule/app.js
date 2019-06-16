@@ -22,7 +22,6 @@ Client.fromEnvironment(Transport, function (err, client) {
         throw err;
       } else {
         console.log('IoT Hub module client initialized');
-
         // Act on input messages to the module.
         client.on('inputMessage', function (inputName, msg) {
           processMessage(client, inputName, msg);
@@ -93,12 +92,20 @@ function processMessage(client, inputName, msg) {
   if (inputName === 'input1') {
     var message = msg.getBytes().toString('utf8');
     if (message) {
-      var outputMsg = new Message(message);
-      client.sendOutputEvent('output1', outputMsg, printResultFor('Sending received message'));
+      handleMessage(JSON.parse(message));
     }
   }
 }
 
+function handleMessage(data) {
+  var result;
+  if (data) {
+  }
+  if (result) {
+    var outputMsg = new Message(JSON.stringify(message));
+    client.sendOutputEvent('output1', outputMsg, printResultFor('Sending received message'));
+  }
+}
 // Helper function to print results in the console
 function printResultFor(op) {
   return function printResult(err, res) {

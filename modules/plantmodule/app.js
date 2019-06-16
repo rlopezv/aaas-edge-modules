@@ -3,15 +3,26 @@
 var Transport = require('azure-iot-device-mqtt').Mqtt;
 var Client = require('azure-iot-device').ModuleClient;
 var Message = require('azure-iot-device').Message;
+var Scheduler = require('node-schedule');
+var sqlite3 = require('sqlite3').verbose();
 
 var _job;
+var _jobLastInvocation;
 var _client;
+var db;
+
+const DAY_PERIOD = 24 * 60 * 60 * 1000;
+const PATH = "/Users/ramon/master/tfm/data/test.db";
+const DATA_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
+FROM telemetry where deviceType = 'PLANT' and gwTime > ?`;
+
 
 Client.fromEnvironment(Transport, function (err, client) {
   if (err) {
     throw err;
   } else {
     _client = client;
+    initDB();
     client.on('error', function (err) {
       throw err;
     });
@@ -25,20 +36,21 @@ Client.fromEnvironment(Transport, function (err, client) {
 
         // Act on input messages to the module.
         client.on('inputMessage', function (inputName, msg) {
-          processMessage(client, inputName, msg);
+          handleSchedule();
+          //processMessage(client, inputName, msg);
         });
         client.getTwin(function (err, twin) {
           if (err) {
-              console.error('Error getting twin: ' + err.message);
+            console.error('Error getting twin: ' + err.message);
           } else {
-              twin.on('properties.desired', function(delta) {
-                processTwinUpdate(delta);
-              });
+            twin.on('properties.desired', function (delta) {
+              processTwinUpdate(delta);
+            });
           };
-          client.onMethod('remoteMethod', function(request, response) {
-            processRemoteInvocation(request,response);
+          client.onMethod('remoteMethod', function (request, response) {
+            processRemoteInvocation(request, response);
           });
-      });
+        });
       }
     });
   }
@@ -55,30 +67,76 @@ function processTwinUpdate(delta) {
 
 function processScheduling(exp) {
   console.log('processScheduling');
-  if (_job && _job!=null) {
+  if (_job && _job != null) {
     _job.cancel();
   }
-  _job = Scheduler.scheduleJob(exp,function() {handleSchedule();});
+  _job = Scheduler.scheduleJob(exp, function () { handleSchedule(); });
   console.log("Next invocation" + _job.nextInvocation());
 }
 
 function handleSchedule() {
   console.log('handleSchedule');
-  var outputMsg = new Message("schedule");
-  _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed"));  
-  console.log("Next invocation" + _job.nextInvocation());
+  let fromTime;
+  if (_jobLastInvocation) {
+    fromTime = _jobLastInvocation.getTime();
+  } else {
+    fromTime = new Date().getTime() - DAY_PERIOD;
+  }
+  db.all(DATA_SELECT, [fromTime], function (err, rows) {
+    if (err) {
+      console.log('Error retrieving data');
+    } else {
+      processRows(rows);
+    }
+  });
+}
+
+function processRows(data) {
+  var result = {};
+  if (data && Array.isArray(data)) {
+    var values = [];
+    for (const value of data) {
+      values.push(JSON.parse(value.data));
+    }
+    var avg = summary(values);
+    console.log(avg);
+    result = JSON.parse(JSON.stringify(data[0]));
+    result.data = {};
+    for (const value of avg) {
+      result.data[value.name] = value.average;
+    }
+    result.avgTime = new Date().toISOString();
+    _jobLastInvocation = new Date();
+    var outputMsg = new Message(JSON.stringify(result));
+    _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed")); 
+  }
+  return result;
+}
+
+function summary(data) {
+  return Array.from(data.reduce(
+    (acc, obj) => Object.keys(obj).reduce(
+      (acc, key) => typeof obj[key] == "number"
+        ? acc.set(key, ( // immediately invoked function:
+          ([sum, count]) => [sum + obj[key], count + 1]
+        )(acc.get(key) || [0, 0])) // pass previous value
+        : acc,
+      acc),
+    new Map()),
+    ([name, [sum, count]]) => ({ name, average: sum / count })
+  );
 }
 
 function processRemoteInvocation(request, response) {
   console.log('processRemoteInvocation');
-  if(request.payload) {
+  if (request.payload) {
     console.log('Payload:');
     console.dir(request.payload);
   }
   var responseBody = {
     message: 'remoteMethod'
   };
-  response.send(200, responseBody, function(err) {
+  response.send(200, responseBody, function (err) {
     if (err) {
       console.log('failed sending method response: ' + err);
     } else {
@@ -109,4 +167,14 @@ function printResultFor(op) {
       console.log(op + ' status: ' + res.constructor.name);
     }
   };
+}
+
+function initDB() {
+  db = new sqlite3.Database(PATH, (err) => {
+    if (err) {
+      console.log('Error when connecting the database', err)
+    } else {
+      console.log('Database conected!');
+    }
+  })
 }
