@@ -62,7 +62,38 @@
           }
         },
         "modules": {
-          "edgenodered": {
+          "postgres": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "postgres:9.6",
+              "createOptions": {
+                "Env": [
+                  "POSTGRES_PASSWORD=docker",
+                  "POSTGRES_DB=aaas_db"
+                ],
+                "ExposedPorts": {
+                  "5432/tcp": {}
+                },
+                "HostConfig": {
+                  "Privileged": true,
+                  "PortBindings": {
+                    "5432/tcp": [
+                      {
+                        "HostPort": "5432"
+                      }
+                    ]
+                  },
+                  "Binds": [
+                    "/aaas/data:/var/lib/postgresql/data"
+                  ]
+                }
+              }
+            }
+          },
+          "nodered": {
             "version": "1.0",
             "type": "docker",
             "status": "running",
@@ -89,7 +120,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "${MODULES.logmodule}",
+              "image": "${MODULES.logmodule.debug}",
               "createOptions": {}
             }
           },
@@ -99,8 +130,19 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "${MODULES.plantmodule}",
-              "createOptions": {}
+              "image": "${MODULES.plantmodule.debug}",
+              "createOptions": {
+                "HostConfig": {
+                  "Privileged": true,
+                  "PortBindings": {
+                    "9229/tcp": [
+                      {
+                        "HostPort": "9239"
+                      }
+                    ]
+                  }
+                }
+              }
             }
           },
           "premiumplantmodule": {
@@ -109,7 +151,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "${MODULES.premiumplantmodule}",
+              "image": "${MODULES.premiumplantmodule.debug}",
               "createOptions": {}
             }
           },
@@ -118,9 +160,49 @@
             "type": "docker",
             "status": "running",
             "restartPolicy": "always",
+            "dependsOn": [
+              "postgres"
+            ],
             "settings": {
-              "image": "${MODULES.messagedispatchermodule}",
+              "image": "${MODULES.messagedispatchermodule.debug}",
+              "createOptions": {
+                "HostConfig": {
+                  "Privileged": true
+                }
+              }
+            }
+          },
+          "weathermodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.weathermodule.debug}",
               "createOptions": {}
+            }
+          },
+          "premiumweathermodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.premiumweathermodule.debug}",
+              "createOptions": {
+                "ExposedPorts": {
+                  "9229/tcp": {}
+                },
+                "HostConfig": {
+                  "PortBindings": {
+                    "9229/tcp": [
+                      {
+                        "HostPort": "9269"
+                      }
+                    ]
+                  }
+                }
+              }
             }
           }
         }
@@ -134,7 +216,11 @@
           "logmoduleToIoTHub": "FROM /messages/modules/logmodule/outputs/* INTO $upstream",
           "plantmoduleToIoTHub": "FROM /messages/modules/plantmodule/outputs/* INTO $upstream",
           "premiumplantmoduleToIoTHub": "FROM /messages/modules/premiumplantmodule/outputs/* INTO $upstream",
-          "messagedispatchermoduleToIoTHub": "FROM /messages/modules/messagedispatchermodule/outputs/* INTO $upstream"
+          "messagedispatchermoduleToIoTHub": "FROM /messages/modules/messagedispatchermodule/outputs/* INTO $upstream",
+          "weathermoduleToIoTHub": "FROM /messages/modules/weathermodule/outputs/* INTO $upstream",
+          "weatherpremiummoduleToIoTHub": "FROM /messages/modules/weatherpremiummodule/outputs/* INTO $upstream",
+          "pgToIoTHub": "FROM /messages/modules/pg/outputs/* INTO $upstream",
+          "premiumweathermoduleToIoTHub": "FROM /messages/modules/premiumweathermodule/outputs/* INTO $upstream"
         },
         "storeAndForwardConfiguration": {
           "timeToLiveSecs": 7200

@@ -3,9 +3,26 @@
 var Transport = require('azure-iot-device-mqtt').Mqtt;
 var Client = require('azure-iot-device').ModuleClient;
 var Message = require('azure-iot-device').Message;
+const { Pool } = require('pg');
+const connectionString = 'postgresql://postgres:docker@postgres/aaas_db';
+const poolConfig = {
+  connectionString: connectionString
+};
+const pool = new Pool(poolConfig);
 
 var _job;
 var _client;
+
+const ALERT_INSERT = `INSERT INTO alert (
+  application, gateway, gatewayId, device, deviceId, data, status,gwTime,edgeTime)
+ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`;
+
+var irriationConf = {
+  SM_MIN : 10,
+  SM_MAX : 60,  
+  HUM_MIN: 20,
+  TEMP_MAX : 35
+}
 
 Client.fromEnvironment(Transport, function (err, client) {
   if (err) {
@@ -89,7 +106,7 @@ function processRemoteInvocation(request, response) {
 // This function just pipes the messages without any change.
 function processMessage(client, inputName, msg) {
   client.complete(msg, printResultFor('Receiving message'));
-  if (inputName === 'input1') {
+  if (inputName === 'data') {
     var message = msg.getBytes().toString('utf8');
     if (message) {
       handleMessage(JSON.parse(message));
@@ -99,13 +116,62 @@ function processMessage(client, inputName, msg) {
 
 function handleMessage(data) {
   var result;
-  if (data) {
-  }
-  if (result) {
-    var outputMsg = new Message(JSON.stringify(message));
-    client.sendOutputEvent('output1', outputMsg, printResultFor('Sending received message'));
+  //Publish message
+  var outputMsg = new Message(JSON.stringify(data));
+  _client.sendOutputEvent('data', outputMsg, printResultFor('Sending received message'));
+  handleAlerts(data);
+}
+
+function handleAlerts(content) {
+ 
+  var result = {};
+   
+  if (content.data) {
+    var data = content.data;
+    if (data.sm<irriationConf.SM_MIN) {
+      result.message = 'Low Soil Moisture';
+      result.irrigation = true;
+    }
+  
+    if (data.humidity < irriationConf.HUM_MIN && data.sm<irriationConf.SM_MAX) {
+      result.message = 'Low Air Humidty';
+      result.irrigation = true;
+    }
+  
+    if (data.temperature > irriationConf.TEMP_MAX && data.sm<irriationConf.SM_MAX) {
+      result.message = 'High temperature';
+      result.irrigation = true;
+    }
+  
+    if (result.irrigation) {
+      result.data = data.data;
+      console.log("publish irrigation message");
+      var outputMsg = new Message(JSON.stringify(result));
+      _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
+      persistAlert(result);
+    }
   }
 }
+
+function persistAlert(message) {
+  //application, gateway, gatewayId, device, deviceId, data,gwTime,edgeTime
+  return pool.query(ALERT_INSERT,[message.application,
+    message.gateway,
+    message.gatewayId,
+    message.device,
+    message.deviceId,
+    JSON.stringify(message.data),
+    getStatus(message.data),
+    new Date(message.gatewayTime).getTime(),
+    new Date().getTime()], (err,res) => {
+      if (err) {
+        return console.log(err.message);
+      }
+      // get the last insert id
+      console.log(`Alert has been inserted with rowid ${res.row[0]}`);
+    });
+}
+
 // Helper function to print results in the console
 function printResultFor(op) {
   return function printResult(err, res) {

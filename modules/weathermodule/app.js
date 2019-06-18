@@ -4,14 +4,6 @@ var Transport = require('azure-iot-device-mqtt').Mqtt;
 var Client = require('azure-iot-device').ModuleClient;
 var Message = require('azure-iot-device').Message;
 var Scheduler = require('node-schedule');
-
-var _job;
-var _jobLastInvocation;
-var _client;
-var db;
-
-const DAY_PERIOD = 24 * 60 * 60 * 1000;
-
 const { Pool } = require('pg');
 const connectionString = 'postgresql://postgres:docker@postgres/aaas_db';
 const poolConfig = {
@@ -19,8 +11,13 @@ const poolConfig = {
 };
 const pool = new Pool(poolConfig);
 
+var _job;
+var _jobLastInvocation;
+var _client;
+
+const DAY_PERIOD = 24 * 60 * 60 * 1000;
 const DATA_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
-FROM telemetry where deviceType = 'PLANT' and gwTime > $1`;
+FROM telemetry where deviceType = 'WEATHER' and gwTime > $1`;
 
 
 Client.fromEnvironment(Transport, function (err, client) {
@@ -86,7 +83,7 @@ function handleSchedule() {
   } else {
     fromTime = new Date().getTime() - DAY_PERIOD;
   }
-  pool.query(DATA_SELECT, [fromTime], (err, res) => {
+  pool.query(DATA_SELECT, [fromTime], (err, rest) => {
     if (err) {
       console.log('Error retrieving data');
     } else {
@@ -171,3 +168,4 @@ function printResultFor(op) {
     }
   };
 }
+

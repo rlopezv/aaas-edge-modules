@@ -2,7 +2,7 @@
     "$schema-version": "0.0.1",
     "description": "",
     "image": {
-        "repository": "aaascontainerregistry.azurecr.io/messagedispatchermodule",
+        "repository": "aaascontainerregistry.azurecr.io/weathermodule",
         "tag": {
             "version": "0.1.0",
             "platforms": {

@@ -67,14 +67,35 @@
           }
         },
         "modules": {
-          "tempSensor": {
+          "postgres": {
             "version": "1.0",
             "type": "docker",
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "mcr.microsoft.com/azureiotedge-simulated-temperature-sensor:1.0",
-              "createOptions": {}
+              "image": "postgres:9.6",
+              "createOptions": {
+                "Env": [
+                  "POSTGRES_PASSWORD=docker",
+                  "POSTGRES_DB=aaas_db"
+                ],
+                "ExposedPorts": {
+                  "5432/tcp": {}
+                },
+                "HostConfig": {
+                  "Privileged": true,
+                  "PortBindings": {
+                    "5432/tcp": [
+                      {
+                        "HostPort": "5432"
+                      }
+                    ]
+                  },
+                  "Binds": [
+                    "/Users/ramon/master/tfm/data:/var/lib/postgresql/data"
+                  ]
+                }
+              }
             }
           },
           "nodered": {
@@ -116,16 +137,12 @@
             "settings": {
               "image": "${MODULES.plantmodule.debug}",
               "createOptions": {
-                "ExposedPorts": {
-                  "9229/tcp": {}
-                },
                 "HostConfig": {
-                    "Privileged": true,
-                    "Binds": ["/Users/ramon/master/tfm/data:/aaas/data"],
+                  "Privileged": true,
                   "PortBindings": {
                     "9229/tcp": [
                       {
-                        "HostPort": "9229"
+                        "HostPort": "9239"
                       }
                     ]
                   }
@@ -148,12 +165,47 @@
             "type": "docker",
             "status": "running",
             "restartPolicy": "always",
+            "dependsOn": [
+              "postgres"
+            ],
             "settings": {
               "image": "${MODULES.messagedispatchermodule.debug}",
               "createOptions": {
                 "HostConfig": {
-                    "Privileged": true,
-                    "Binds": ["/Users/ramon/master/tfm/data:/aaas/data"]
+                  "Privileged": true
+                }
+              }
+            }
+          },
+          "weathermodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.weathermodule.debug}",
+              "createOptions": {}
+            }
+          },
+          "premiumweathermodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.premiumweathermodule.debug}",
+              "createOptions": {
+                "ExposedPorts": {
+                  "9229/tcp": {}
+                },
+                "HostConfig": {
+                  "PortBindings": {
+                    "9229/tcp": [
+                      {
+                        "HostPort": "9269"
+                      }
+                    ]
+                  }
                 }
               }
             }
@@ -165,7 +217,13 @@
       "properties.desired": {
         "schemaVersion": "1.0",
         "routes": {
-          "noderedToMessageDispatcherModule": "FROM /messages/modules/nodered/outputs/* INTO BrokeredEndpoint(\"/modules/messagedispatchermodule/inputs/input1\")"
+          "noderedToMessageDispatcherModule": "FROM /messages/modules/nodered/outputs/* INTO BrokeredEndpoint(\"/modules/messagedispatchermodule/inputs/input1\")",
+          "weathermoduleToIoTHub": "FROM /messages/modules/weathermodule/outputs/* INTO $upstream",
+          "plantmoduleToIoTHub": "FROM /messages/modules/plantmodule/outputs/* INTO $upstream",
+          "meesageDispatcherModuleToPremiumPlantModule": "FROM /messages/modules/messagedispatchermodule/outputs/plant INTO BrokeredEndpoint(\"/modules/premiumplantmodule/inputs/data\")",
+          "premiumPlantModuleToIoTHub": "FROM /messages/modules/plantpremiummodule/outputs/* INTO $upstream",
+          "pgToIoTHub": "FROM /messages/modules/pg/outputs/* INTO $upstream",
+          "premiumweathermoduleToIoTHub": "FROM /messages/modules/premiumweathermodule/outputs/* INTO $upstream"
         },
         "storeAndForwardConfiguration": {
           "timeToLiveSecs": 7200
@@ -174,4 +232,3 @@
     }
   }
 }
-
