@@ -12,16 +12,14 @@ const pool = new Pool(poolConfig);
 
 var _job;
 var _client;
+var _lastNotification;
 
 const ALERT_INSERT = `INSERT INTO alert (
   application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`;
 
-var irriationConf = {
-  SM_MIN : 10,
-  SM_MAX : 60,  
-  HUM_MIN: 20,
-  TEMP_MAX : 35
+var statusConf = {
+  NOTIFICATION_PERIOD: 1
 }
 
 Client.fromEnvironment(Transport, function (err, client) {
@@ -45,16 +43,16 @@ Client.fromEnvironment(Transport, function (err, client) {
         });
         client.getTwin(function (err, twin) {
           if (err) {
-              console.error('Error getting twin: ' + err.message);
+            console.error('Error getting twin: ' + err.message);
           } else {
-              twin.on('properties.desired', function(delta) {
-                processTwinUpdate(delta);
-              });
+            twin.on('properties.desired', function (delta) {
+              processTwinUpdate(delta);
+            });
           };
-          client.onMethod('remoteMethod', function(request, response) {
-            processRemoteInvocation(request,response);
+          client.onMethod('remoteMethod', function (request, response) {
+            processRemoteInvocation(request, response);
           });
-      });
+        });
       }
     });
   }
@@ -71,30 +69,30 @@ function processTwinUpdate(delta) {
 
 function processScheduling(exp) {
   console.log('processScheduling');
-  if (_job && _job!=null) {
+  if (_job && _job != null) {
     _job.cancel();
   }
-  _job = Scheduler.scheduleJob(exp,function() {handleSchedule();});
+  _job = Scheduler.scheduleJob(exp, function () { handleSchedule(); });
   console.log("Next invocation" + _job.nextInvocation());
 }
 
 function handleSchedule() {
   console.log('handleSchedule');
   var outputMsg = new Message("schedule");
-  _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed"));  
+  _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed"));
   console.log("Next invocation" + _job.nextInvocation());
 }
 
 function processRemoteInvocation(request, response) {
   console.log('processRemoteInvocation');
-  if(request.payload) {
+  if (request.payload) {
     console.log('Payload:');
     console.dir(request.payload);
   }
   var responseBody = {
     message: 'remoteMethod'
   };
-  response.send(200, responseBody, function(err) {
+  response.send(200, responseBody, function (err) {
     if (err) {
       console.log('failed sending method response: ' + err);
     } else {
@@ -103,7 +101,6 @@ function processRemoteInvocation(request, response) {
   });
 }
 
-// This function just pipes the messages without any change.
 function processMessage(client, inputName, msg) {
   client.complete(msg, printResultFor('Receiving message'));
   if (inputName === 'data') {
@@ -115,46 +112,29 @@ function processMessage(client, inputName, msg) {
 }
 
 function handleMessage(data) {
-  var result;
   //Publish message
-  var outputMsg = new Message(JSON.stringify(data));
-  _client.sendOutputEvent('data', outputMsg, printResultFor('Sending received message'));
-  handleAlerts(data);
+  if (data.status) {
+    var outputMsg = new Message(JSON.stringify(data));
+    _client.sendOutputEvent('data', outputMsg, printResultFor('Sending status message'));
+    handleAlerts(data);
+  }
 }
 
 function handleAlerts(content) {
- 
   var result = {};
-   
+
   if (content.data) {
     var data = content.data;
-    if (data.sm<irriationConf.SM_MIN) {
-      var alertMessage = {};
-      alertMessage.message = 'Low Soil Moisture';
-      alertMessage.irrigation = true;
-      result.message = alertMessage;
-    }
-  
-    if (data.humidity < irriationConf.HUM_MIN && data.sm<irriationConf.SM_MAX) {
-      var alertMessage = {};
-      alertMessage.message = 'Low Air Humidty';
-      alertMessage.irrigation = true;
-      result.message = alertMessage;
-    }
-  
-    if (data.temperature > irriationConf.TEMP_MAX && data.sm<irriationConf.SM_MAX) {
-      var alertMessage = {};
-      alertMessage.message = 'High temperature';
-      alertMessage.irrigation = true;
-      result.message = alertMessage;
-    }
-
-  
-    if (result.message) {
-      result.data = content;
-      console.log("publish irrigation message");
-      var outputMsg = new Message(JSON.stringify(result));
-      _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
+    if (content.status && !content.status) {
+      result.message = {};
+      result.message.message = "Device Sensors Errors";
+      result.data = data;
+      if (!_lastNotification || new Date().getTime() > _lastNotification.getTime() + statusConf.NOTIFICATION_PERIOD * 60 * 1000) {
+        var outputMsg = new Message(JSON.stringify(result));
+        _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
+        _lastNotification = new Date();
+      }
+      
       persistAlert(content,result);
     }
   }

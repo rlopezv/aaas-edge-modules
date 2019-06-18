@@ -39,6 +39,21 @@ const TELEMETRY_SCHEMA = `CREATE TABLE IF NOT EXISTS telemetry (
   edgeTime BIGINT NOT NULL
 )`;
 
+const ALERT_SCHEMA = `CREATE TABLE IF NOT EXISTS alert (
+  id SERIAL NOT NULL PRIMARY KEY,
+  application text NOT NULL,
+  gateway text NOT NULL,
+  gatewayId text NOT NULL,
+  device text NOT NULL,
+  deviceId text NOT NULL,
+  deviceType text NOT NULL,
+  data text,
+  message text,
+  gwTime BIGINT NOT NULL,
+  edgeTime BIGINT NOT NULL
+)`;
+
+
 const STATUS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS status (
   id SERIAL NOT NULL PRIMARY KEY,
@@ -115,87 +130,96 @@ function handleMessage(message) {
   var result;
   if (message.type) {
     let type = message.type;
-    switch(type) {
+    switch (type) {
       case 'JOIN': result = handleJoin(message);
-      break;
+        break;
       case 'DATA': if (message.data && message.data.content) {
-        if (message.data.content=='status') {
+        if (message.data.content == 'status') {
+          message.status = getStatus(message.data);
           result = handleStatus(message);
-        } else if (message.data.content=='data') {
+        } else if (message.data.content == 'data') {
           result = handleData(message);
         }
       }
-      break;
+        break;
       default:
         console.log('Message not known');
-      break;
+        break;
     }
   }
   return result;
 }
 
 function handleJoin(message) {
-    //application,device,deviceId,type,edgeTime
-    return pool.query(JOIN_INSERT,[message.application,
-      message.device,
-      message.deviceId,
-      message.type,
-      new Date().getTime()], (err, res) => {
-        if (err) {
-          return console.log(err.message);
-        }
-        // get the last insert id
-        console.log(`A row has been inserted`);
-        var outputMsg = new Message(message);
-        _client.sendOutputEvent('gateway', outputMsg, printResultFor('Sending join message'));
-      });
+  //application,device,deviceId,type,edgeTime
+  return pool.query(JOIN_INSERT, [message.application,
+  message.device,
+  message.deviceId,
+  message.type,
+  new Date().getTime()], (err, res) => {
+    if (err) {
+      return console.log(err.message);
+    }
+    // get the last insert id
+    console.log(`A row has been inserted`);
+    var outputMsg = new Message(message);
+    _client.sendOutputEvent('gateway', outputMsg, printResultFor('Sending join message'));
+  });
 }
 
 function handleData(message) {
   //application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime
-  return pool.query(DATA_INSERT,[message.application,
-    message.gateway,
-    message.gatewayId,
-    message.device,
-    message.deviceId,
-    message.deviceType,
-    JSON.stringify(message.data),
-    new Date(message.gatewayTime).getTime(),
-    new Date().getTime()], (err,res) => {
-      if (err) {
-        return console.log(err.message);
-      }
-      // get the last insert id
-      console.log(`Data has been inserted`);
-      var outputMsg = new Message(JSON.stringify(message));
-      _client.sendOutputEvent(message.deviceType, outputMsg, printResultFor('Sending data message'));
-    });
+  return pool.query(DATA_INSERT, [message.application,
+  message.gateway,
+  message.gatewayId,
+  message.device,
+  message.deviceId,
+  message.deviceType,
+  JSON.stringify(message.data),
+  new Date(message.gatewayTime).getTime(),
+  new Date().getTime()], (err, res) => {
+    if (err) {
+      return console.log(err.message);
+    }
+    // get the last insert id
+    console.log(`Data has been inserted`);
+    var outputMsg = new Message(JSON.stringify(message));
+    _client.sendOutputEvent(message.deviceType, outputMsg, printResultFor('Sending data message'));
+  });
 }
 
 function handleStatus(message) {
   //application, gateway, gatewayId, device, deviceId, data,gwTime,edgeTime
-  return pool.query(STATUS_INSERT,[message.application,
-    message.gateway,
-    message.gatewayId,
-    message.device,
-    message.deviceId,
-    JSON.stringify(message.data),
-    getStatus(message.data),
-    new Date(message.gatewayTime).getTime(),
-    new Date().getTime()], (err,res) => {
-      if (err) {
-        return console.log(err.message);
-      }
-      // get the last insert id
-      console.log(`Status been inserted`);
-      var outputMsg = new Message(JSON.stringify(message));
-      _client.sendOutputEvent('status', outputMsg, printResultFor('Sending status message'));
-    });
+  return pool.query(STATUS_INSERT, [message.application,
+  message.gateway,
+  message.gatewayId,
+  message.device,
+  message.deviceId,
+  JSON.stringify(message.data),
+  message.status,
+  new Date(message.gatewayTime).getTime(),
+  new Date().getTime()], (err, res) => {
+    if (err) {
+      return console.log(err.message);
+    }
+    // get the last insert id
+    console.log(`Status been inserted`);
+    var outputMsg = new Message(JSON.stringify(message));
+    _client.sendOutputEvent('status', outputMsg, printResultFor('Sending status message'));
+  });
 
 }
 
 function getStatus(data) {
-  return true;
+  var result = true;
+  if (data) {
+    for (var key in data) {
+      if (typeof (data[key]) === 'boolean') {
+        result = result && data[key];
+      }
+    }
+  }
+  return result;
 }
 
 function isAvailable() {
@@ -203,34 +227,41 @@ function isAvailable() {
 }
 
 function initDB() {
-    waitOn(WAIT_OPTS, function (error) {
+  waitOn(WAIT_OPTS, function (error) {
     if (error) {
       console.log(error.message);
     } else {
-      pool.query(STATUS_SCHEMA,(err,res) => {
+      pool.query(STATUS_SCHEMA, (err, res) => {
         if (err) {
           console.log(err.message);
         } else {
           console.log("Created STATUS TABLE");
         }
       });
-      pool.query(TELEMETRY_SCHEMA,(err,res) => {
+      pool.query(TELEMETRY_SCHEMA, (err, res) => {
         if (err) {
           console.log(err.message);
         } else {
           console.log("Created DATA TABLE");
         }
       });
-      pool.query(GATEWAY_SCHEMA,(err,res) => {
+      pool.query(GATEWAY_SCHEMA, (err, res) => {
         if (err) {
           console.log(err.message);
         } else {
           console.log("Created GATEWAY TABLE");
         }
       });
+      pool.query(ALERT_SCHEMA, (err, res) => {
+        if (err) {
+          console.log(err.message);
+        } else {
+          console.log("Created ALERT TABLE");
+        }
+      });
     }
-    });
-    // once here, all resources are available
+  });
+  // once here, all resources are available
 }
 // Helper function to print results in the console
 function printResultFor(op) {

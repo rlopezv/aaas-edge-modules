@@ -68,8 +68,8 @@
       "name": "messagedispatchermodule Remote Debug (Node.js)",
       "type": "node",
       "request": "attach",
-      "port": 9229,
-      "address": "localhost",
+      "port": 9269,
+      "address": "192.168.1.75",
       "localRoot": "${workspaceRoot}/modules/messagedispatchermodule",
       "remoteRoot": "/app",
       "protocol": "inspector"
@@ -142,6 +142,27 @@
       "type": "node",
       "request": "launch",
       "program": "${workspaceRoot}/modules/premiumweathermodule/app.js",
+      "console": "integratedTerminal",
+      "env": {
+        "EdgeHubConnectionString": "${config:azure-iot-edge.EdgeHubConnectionString}",
+        "EdgeModuleCACertificateFile": "${config:azure-iot-edge.EdgeModuleCACertificateFile}"
+      }
+    },
+    {
+      "name": "statusmodule Remote Debug (Node.js)",
+      "type": "node",
+      "request": "attach",
+      "port": 9329,
+      "address": "localhost",
+      "localRoot": "${workspaceRoot}/modules/statusmodule",
+      "remoteRoot": "/app",
+      "protocol": "inspector"
+    },
+    {
+      "name": "statusmodule Local Debug (Node.js)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceRoot}/modules/statusmodule/app.js",
       "console": "integratedTerminal",
       "env": {
         "EdgeHubConnectionString": "${config:azure-iot-edge.EdgeHubConnectionString}",

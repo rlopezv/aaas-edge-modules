@@ -97,7 +97,7 @@ function handleSchedule() {
 
 function processRows(data) {
   var result = {};
-  if (data && Array.isArray(data)) {
+  if (data && Array.isArray(data) && data.length>0) {
     var values = [];
     for (const value of data) {
       values.push(JSON.parse(value.data));
