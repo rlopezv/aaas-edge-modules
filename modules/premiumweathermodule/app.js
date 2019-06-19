@@ -54,8 +54,8 @@ Client.fromEnvironment(Transport, function (err, client) {
                 processTwinUpdate(delta);
               });
           };
-          client.onMethod('remoteMethod', function(request, response) {
-            processRemoteInvocation(request,response);
+          client.onMethod('config', function(request, response) {
+            processConfigRequest(request,response);
           });
       });
       }
@@ -72,15 +72,31 @@ function processTwinUpdate(delta) {
 
 }
 
-function processRemoteInvocation(request, response) {
-  console.log('processRemoteInvocation');
+function processConfigRequest(request, response) {
+  console.log('processConfigInvocation');
+  var changed = false;
   if(request.payload) {
-    console.log('Payload:');
-    console.dir(request.payload);
+    console.log('Request:'+JSON.stringify(requestPayload));
+    let content = request.payload;
+    if (content.zambrettiConf) {
+      let data = content.zambrettiConf;
+      for (const parm in zambrettiConf) {
+        if (data[parm]) {
+          changed = changed || true;
+          zambrettiConf[parm] = data[parm];
+        }
+      }
+    } 
   }
-  var responseBody = {
-    message: 'remoteMethod'
-  };
+  var responseBody = {}
+  var result = {}
+  if (changed) {
+    result.message = 'updated';
+    result.data = JSON.stringify({newConf:zambrettiConf})
+  } else {
+    result.message = 'no update';
+  }
+  responseBody.result = result;
   response.send(200, responseBody, function(err) {
     if (err) {
       console.log('failed sending method response: ' + err);
@@ -90,7 +106,6 @@ function processRemoteInvocation(request, response) {
   });
 }
 
-// This function just pipes the messages without any change.
 function processMessage(client, inputName, msg) {
   client.complete(msg, printResultFor('Receiving message'));
   if (inputName === 'data') {

@@ -68,8 +68,8 @@
       "name": "messagedispatchermodule Remote Debug (Node.js)",
       "type": "node",
       "request": "attach",
-      "port": 9269,
-      "address": "192.168.1.75",
+      "port": 9429,
+      "address": "localhost",
       "localRoot": "${workspaceRoot}/modules/messagedispatchermodule",
       "remoteRoot": "/app",
       "protocol": "inspector"

@@ -171,8 +171,17 @@
             "settings": {
               "image": "${MODULES.messagedispatchermodule.debug}",
               "createOptions": {
+                "ExposedPorts": {
+                  "9229/tcp": {}
+                },
                 "HostConfig": {
-                  "Privileged": true
+                  "PortBindings": {
+                    "9229/tcp": [
+                      {
+                        "HostPort": "9429"
+                      }
+                    ]
+                  }
                 }
               }
             }

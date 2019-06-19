@@ -11,10 +11,7 @@ const WAIT_OPTS = {
     'tcp:postgres:5432'
   ],
   interval: 100, // poll interval in ms, default 250ms
-  timeout: 30000, // timeout in ms, default Infinity
-  tcpTimeout: 10000, // tcp timeout in ms, default 300ms
-  window: 1000, // stabilization time in ms, default 750ms
-
+  window: 1000 // stabilization time in ms, default 750ms
 };
 
 const connectionString = 'postgresql://postgres:docker@postgres/aaas_db';
@@ -51,6 +48,12 @@ const ALERT_SCHEMA = `CREATE TABLE IF NOT EXISTS alert (
   message text,
   gwTime BIGINT NOT NULL,
   edgeTime BIGINT NOT NULL
+)`;
+
+const AUDIT_SENT_SCHEMA = `CREATE TABLE IF NOT EXISTS auditupload (
+  deviceId text NOT NULL,
+  deviceType text NOT NULL,
+  uploadTime BIGINT NOT NULL
 )`;
 
 
@@ -235,30 +238,37 @@ function initDB() {
         if (err) {
           console.log(err.message);
         } else {
-          console.log("Created STATUS TABLE");
+          console.log("Created or Updated STATUS TABLE");
         }
       });
       pool.query(TELEMETRY_SCHEMA, (err, res) => {
         if (err) {
           console.log(err.message);
         } else {
-          console.log("Created DATA TABLE");
+          console.log("Created or Updated  DATA TABLE");
         }
       });
       pool.query(GATEWAY_SCHEMA, (err, res) => {
         if (err) {
           console.log(err.message);
         } else {
-          console.log("Created GATEWAY TABLE");
+          console.log("Created or Updated  GATEWAY TABLE");
         }
       });
       pool.query(ALERT_SCHEMA, (err, res) => {
         if (err) {
           console.log(err.message);
         } else {
-          console.log("Created ALERT TABLE");
+          console.log("Created or Updated  ALERT TABLE");
         }
       });
+      pool.query(AUDIT_SENT_SCHEMA, (err, res) => {
+        if (err) {
+          console.log(err.message);
+        } else {
+          console.log("Created or Updated  AUDIT SENT TABLE");
+        }
+      });  
     }
   });
   // once here, all resources are available

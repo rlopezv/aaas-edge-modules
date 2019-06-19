@@ -22,6 +22,21 @@ const pool = new Pool(poolConfig);
 const DATA_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
 FROM telemetry where deviceType = 'PLANT' and gwTime > $1`;
 
+const DATA_LAST_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
+FROM telemetry where deviceType = 'PLANT' and gwTime > $1 limit 1`;
+
+const UPDATE_LAST_SEND = `
+UPDATE auditupload set uploadtime = $3
+WHERE deviceId = $1 AND deviceType = $2`;
+
+const INSERT_LAST_SEND = `
+INSERT INTO auditupload (deviceId, deviceType, uploadtime)
+VALUES ($1,$2,$3)`;
+const SELECT_LAST_SEND = `select telemetry.deviceId as deviceId,telemetry.deviceType as deviceType, MAX(auditupload.uploadtime) as uploadtime
+from telemetry
+LEFT OUTER JOIN auditupload
+    ON auditupload.deviceId=telemetry.deviceId
+group by 1,2`;
 
 Client.fromEnvironment(Transport, function (err, client) {
   if (err) {
@@ -86,88 +101,144 @@ function handleSchedule() {
   } else {
     fromTime = new Date().getTime() - DAY_PERIOD;
   }
-  pool.query(DATA_SELECT, [fromTime], (err, res) => {
+
+  processLastMeasures();
+
+  //Summary
+  // pool.query(DATA_SELECT, [fromTime], (err, res) => {
+  //   if (err) {
+  //     console.log('Error retrieving data');
+  //   } else {
+  //     processRows(res.rows);
+  //   }
+  // });
+}
+
+function processLastMeasures(data) {
+  pool.query(SELECT_LAST_SEND, [], (err, res) => {
     if (err) {
       console.log('Error retrieving data');
     } else {
-      processRows(res.rows);
-    }
-  });
+      if (res.rows && res.rows.length > 0) {
+        for (var row of res.rows) {
+          processLastMeasure(row);
+        }
+      }
+    }})
+  }
+
+function processLastMeasure(data) {
+
+  var fromTime = data.uploadtime;
+  if (!fromTime || fromTime==null) {
+    fromTime = 0;
+  }
+
+  pool.query(DATA_LAST_SELECT, [fromTime], (err, res) => {
+       if (err) {
+         console.log('Error retrieving data');
+       } else {
+         if (res.rows && res.rows.length==1) {
+          processLastSent(fromTime,res.rows[0]);
+         }
+       }
+     });
 }
 
-function processRows(data) {
-  var result = {};
-  if (data && Array.isArray(data) && data.length>0) {
-    var values = [];
-    for (const value of data) {
-      values.push(JSON.parse(value.data));
-    }
-    var avg = summary(values);
-    result = JSON.parse(JSON.stringify(data[0]));
-    result.data = {};
-    for (const value of avg) {
-      result.data[value.name] = value.average;
-    }
-    result.avgTime = new Date().toISOString();
-    _jobLastInvocation = new Date();
-    var outputMsg = new Message(JSON.stringify(result));
-    _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed")); 
-  }
-  return result;
+function processLastSent(time,row) {
+  var sentTime = time;
+  var query = UPDATE_LAST_SEND;
+  if (sentTime == 0) {
+    sentTime = new Date().getTime();
+    query = INSERT_LAST_SEND;
+  } 
+    pool.query(query, [row.deviceid,
+    row.devicetype,sentTime], (err, res) => {
+      if (err) {
+        return console.log(err.message);
+      } else {
+      // get the last insert id
+      console.log(`A row has been inserted`);
+      row.data= JSON.parse(row.data);
+      var outputMsg = new Message(JSON.stringify(row));
+      _client.sendOutputEvent('gateway', outputMsg, printResultFor('Sending join message'));
+      }
+    });
+
 }
+function processRows(data) {
+      var result = {};
+      if (data && Array.isArray(data) && data.length > 0) {
+        var values = [];
+        for (const value of data) {
+          values.push(JSON.parse(value.data));
+        }
+        var avg = summary(values);
+        result = JSON.parse(JSON.stringify(data[0]));
+        result.data = {};
+        for (const value of avg) {
+          result.data[value.name] = value.average;
+        }
+        result.avgTime = new Date().toISOString();
+        _jobLastInvocation = new Date();
+        var outputMsg = new Message(JSON.stringify(result));
+        _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed"));
+      }
+      return result;
+    }
 
 function summary(data) {
-  return Array.from(data.reduce(
-    (acc, obj) => Object.keys(obj).reduce(
-      (acc, key) => typeof obj[key] == "number"
-        ? acc.set(key, ( // immediately invoked function:
-          ([sum, count]) => [sum + obj[key], count + 1]
-        )(acc.get(key) || [0, 0])) // pass previous value
-        : acc,
-      acc),
-    new Map()),
-    ([name, [sum, count]]) => ({ name, average: sum / count })
-  );
-}
+      return Array.from(data.reduce(
+        (acc, obj) => Object.keys(obj).reduce(
+          (acc, key) => typeof obj[key] == "number"
+            ? acc.set(key, ( // immediately invoked function:
+              ([sum, count]) => [sum + obj[key], count + 1]
+            )(acc.get(key) || [0, 0])) // pass previous value
+            : acc,
+          acc),
+        new Map()),
+        ([name, [sum, count]]) => ({ name, average: sum / count })
+      );
+    }
 
 function processRemoteInvocation(request, response) {
-  console.log('processRemoteInvocation');
-  if (request.payload) {
-    console.log('Payload:');
-    console.dir(request.payload);
-  }
-  var responseBody = {
-    message: 'remoteMethod'
-  };
-  response.send(200, responseBody, function (err) {
-    if (err) {
-      console.log('failed sending method response: ' + err);
-    } else {
-      console.log('successfully sent method response');
+      console.log('processRemoteInvocation');
+      if (request.payload) {
+        console.log('Payload:');
+        console.dir(request.payload);
+      }
+      var responseBody = {
+        message: 'remoteMethod'
+      };
+      response.send(200, responseBody, function (err) {
+        if (err) {
+          console.log('failed sending method response: ' + err);
+        } else {
+          console.log('successfully sent method response');
+        }
+      });
     }
-  });
-}
 
 // This function just pipes the messages without any change.
 function processMessage(client, inputName, msg) {
-  client.complete(msg, printResultFor('Receiving message'));
-  if (inputName === 'input1') {
-    var message = msg.getBytes().toString('utf8');
-    if (message) {
-      var outputMsg = new Message(message);
-      client.sendOutputEvent('output1', outputMsg, printResultFor('Sending received message'));
+      client.complete(msg, printResultFor('Receiving message'));
+      if (inputName === 'input1') {
+        var message = msg.getBytes().toString('utf8');
+        if (message) {
+          var outputMsg = new Message(message);
+          client.sendOutputEvent('output1', outputMsg, printResultFor('Sending received message'));
+        }
+      }
     }
-  }
-}
 
 // Helper function to print results in the console
 function printResultFor(op) {
-  return function printResult(err, res) {
-    if (err) {
-      console.log(op + ' error: ' + err.toString());
+      return function printResult(err, res) {
+        if (err) {
+          console.log(op + ' error: ' + err.toString());
+        }
+        if (res) {
+          console.log(op + ' status: ' + res.constructor.name);
+        }
+      };
     }
-    if (res) {
-      console.log(op + ' status: ' + res.constructor.name);
-    }
-  };
-}
