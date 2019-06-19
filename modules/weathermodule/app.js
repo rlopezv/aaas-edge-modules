@@ -1,3 +1,9 @@
+'use strict';
+
+var Transport = require('azure-iot-device-mqtt').Mqtt;
+var Client = require('azure-iot-device').ModuleClient;
+var Message = require('azure-iot-device').Message;
+var Scheduler = require('node-schedule');
 var _job;
 var _jobLastInvocation;
 var _client;
