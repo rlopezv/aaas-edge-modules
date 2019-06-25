@@ -37,6 +37,10 @@ LEFT OUTER JOIN auditupload
     ON auditupload.deviceId=telemetry.deviceId
 group by 1,2`;
 
+const DEFAULT_SCHEDULING = '*/15 * * * *';
+
+var _scheduling;
+
 Client.fromEnvironment(Transport, function (err, client) {
   if (err) {
     throw err;
@@ -80,14 +84,29 @@ Client.fromEnvironment(Transport, function (err, client) {
 function processTwinUpdate(delta) {
   console.log('processTwinUpdate');
   console.log(delta);
+  if (delta.schedule) {
+    processScheduling(delta.schedule);
+  } else {
+    if (!_scheduling) {
+      if (twin.properties.reported.schedule) {
+        processScheduling(twin.properties.reported.schedule);
+      } else {
+        processScheduling(DEFAULT_SCHEDULING);
+      }
+    }
+  }
 }
 
 function processScheduling(exp) {
   console.log('processScheduling');
-  if (_job && _job != null) {
-    _job.cancel();
+  if (exp !== _scheduling) {
+    if (_job && _job != null) {
+      _job.cancel();
+    }
+    _scheduling = exp;
+    _job = Scheduler.scheduleJob(exp, function () { handleSchedule(exp); });
+    reporTwinProperties({ schedule: exp });
   }
-  _job = Scheduler.scheduleJob(exp, function () { handleSchedule(); });
 }
 
 function handleSchedule() {
@@ -234,27 +253,41 @@ function processRemoteStatus(request, response) {
 }
 
 function processRemoteConfig(request, response) {
-  console.log('received configuration');
-  var content = null; 
-  if (request.payload) {
-    console.log(request.payload);
-    content = request.payload;
-  }
-  if (content.scheduling) {
-      processScheduling(content.scheduling);
-  }
-  var responseBody = {
-    message: 'processed'
-  };
-  response.send(200, responseBody, function (err) {
-    if (err) {
-      console.log('failed sending method response: ' + err);
-    } else {
-      console.log('successfully sent method response');
+    console.log('received configuration');
+    var content = null;
+    if (request.payload) {
+      console.log(request.payload);
+      content = request.payload;
     }
-  });
-}
+    if (content.scheduling) {
+      processScheduling(content.scheduling);
+    }
+    var responseBody = {
+      message: 'processed'
+    };
+    response.send(200, responseBody, function (err) {
+      if (err) {
+        console.log('failed sending method response: ' + err);
+      } else {
+        console.log('successfully sent method response');
+      }
+    });
+  }
 
 function getStatusInfo() {
   return { status: true, time:new Date().getTime() };
+}
+
+function reporTwinProperties(patch) {
+  _client.getTwin(function (err, twin) {
+    if (err) {
+      console.log('Error obtaining twin');
+    } else {
+      // send the patch
+      twin.properties.reported.update(patch, function (err) {
+        if (err) throw err;
+        console.log('twin state reported');
+      });
+    }
+  });
 }

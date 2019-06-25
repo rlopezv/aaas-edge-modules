@@ -49,8 +49,11 @@ Client.fromEnvironment(Transport, function (err, client) {
               processTwinUpdate(delta);
             });
           };
-          client.onMethod('remoteMethod', function (request, response) {
-            processRemoteInvocation(request, response);
+          client.onMethod('config', function (request, response) {
+            processRemoteConfig(request, response);
+          });
+          client.onMethod('status', function (request, response) {
+            processRemoteStatus(request, response);
           });
         });
       }
@@ -171,4 +174,44 @@ function printResultFor(op) {
       console.log(op + ' status: ' + res.constructor.name);
     }
   };
+}
+
+function processRemoteStatus(request, response) {
+  console.log('received status');
+  if (request.payload) {
+    console.log('Payload:');
+    console.dir(request.payload);
+  }
+  var responseBody = {};
+  responseBody.result = getStatusInfo();
+  response.send(200, responseBody, function (err) {
+    if (err) {
+      console.log('failed sending method response: ' + err);
+    } else {
+      console.log('successfully sent method response');
+    }
+  });
+}
+
+function processRemoteConfig(request, response) {
+  console.log('received configuration');
+  var content = null; 
+  if (request.payload) {
+    console.log(request.payload);
+    content = request.payload;
+  }
+  var responseBody = {
+    message: 'processed'
+  };
+  response.send(200, responseBody, function (err) {
+    if (err) {
+      console.log('failed sending method response: ' + err);
+    } else {
+      console.log('successfully sent method response');
+    }
+  });
+}
+
+function getStatusInfo() {
+  return { status: true, time:new Date().getTime() };
 }

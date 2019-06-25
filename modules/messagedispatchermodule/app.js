@@ -22,7 +22,7 @@ const pool = new Pool(poolConfig);
 
 var _client;
 
-
+//Table for telemetry messages table
 const TELEMETRY_SCHEMA = `CREATE TABLE IF NOT EXISTS telemetry (
   id SERIAL NOT NULL PRIMARY KEY,
   application text NOT NULL,
@@ -36,6 +36,7 @@ const TELEMETRY_SCHEMA = `CREATE TABLE IF NOT EXISTS telemetry (
   edgeTime BIGINT NOT NULL
 )`;
 
+//Table for alert messages table
 const ALERT_SCHEMA = `CREATE TABLE IF NOT EXISTS alert (
   id SERIAL NOT NULL PRIMARY KEY,
   application text NOT NULL,
@@ -50,13 +51,14 @@ const ALERT_SCHEMA = `CREATE TABLE IF NOT EXISTS alert (
   edgeTime BIGINT NOT NULL
 )`;
 
+//Table for sent messages table
 const AUDIT_SENT_SCHEMA = `CREATE TABLE IF NOT EXISTS auditupload (
   deviceId text NOT NULL,
   deviceType text NOT NULL,
   uploadTime BIGINT NOT NULL
 )`;
 
-
+//Table for status messages table
 const STATUS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS status (
   id SERIAL NOT NULL PRIMARY KEY,
@@ -111,6 +113,24 @@ Client.fromEnvironment(Transport, function (err, client) {
         client.on('inputMessage', function (inputName, msg) {
           processMessage(client, inputName, msg);
         });
+        client.getTwin(function (err, twin) {
+          if (err) {
+            console.error('Error getting twin: ' + err.message);
+          } else {
+            twin.on('properties.desired', function (delta) {
+              processTwinUpdate(twin, delta);
+            });
+          };
+          client.onMethod('config', function (request, response) {
+            processRemoteConfig(request, response);
+          });
+          client.onMethod('status', function (request, response) {
+            processRemoteStatus(request, response);
+          });
+          client.onMethod('command', function (request, response) {
+            processCommand(request, response);
+          });
+        });
       }
     });
   }
@@ -119,7 +139,6 @@ Client.fromEnvironment(Transport, function (err, client) {
 // This function just pipes the messages without any change.
 function processMessage(client, inputName, msg) {
   client.complete(msg, printResultFor('Receiving message'));
-
   if (inputName === 'input1') {
     var message = msg.getBytes().toString('utf8');
     //Dispatches over data
@@ -129,6 +148,7 @@ function processMessage(client, inputName, msg) {
   }
 }
 
+//Process message recevived
 function handleMessage(message) {
   var result;
   if (message.type) {
@@ -153,6 +173,7 @@ function handleMessage(message) {
   return result;
 }
 
+//inserts join data
 function handleJoin(message) {
   //application,device,deviceId,type,edgeTime
   return pool.query(JOIN_INSERT, [message.application,
@@ -170,6 +191,7 @@ function handleJoin(message) {
   });
 }
 
+//Inserts data event
 function handleData(message) {
   //application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime
   return pool.query(DATA_INSERT, [message.application,
@@ -191,8 +213,8 @@ function handleData(message) {
   });
 }
 
+//Inserts status event
 function handleStatus(message) {
-  //application, gateway, gatewayId, device, deviceId, data,gwTime,edgeTime
   return pool.query(STATUS_INSERT, [message.application,
   message.gateway,
   message.gatewayId,
@@ -225,9 +247,6 @@ function getStatus(data) {
   return result;
 }
 
-function isAvailable() {
-
-}
 
 function initDB() {
   waitOn(WAIT_OPTS, function (error) {
@@ -283,6 +302,83 @@ function printResultFor(op) {
       console.log(op + ' status: ' + res.constructor.name);
     }
   };
+}
+
+function processRemoteStatus(request, response) {
+  console.log('received status');
+  if (request.payload) {
+    console.log('Payload:');
+    console.dir(request.payload);
+  }
+  var responseBody = {};
+  responseBody.result = getStatusInfo();
+  response.send(200, responseBody, function (err) {
+    if (err) {
+      console.log('failed sending method response: ' + err);
+    } else {
+      console.log('successfully sent method response');
+    }
+  });
+}
+
+function processRemoteConfig(request, response) {
+  console.log('received configuration request');
+  var content = null;
+  if (request.payload) {
+    console.log(request.payload);
+    content = request.payload;
+  }
+  
+  response.send(200, responseBody, function (err) {
+    if (err) {
+      console.log('failed sending method response: ' + err);
+    } else {
+      console.log('successfully sent method response');
+    }
+  });
+}
+
+function getStatusInfo() {
+  return { status: true, time: new Date().getTime() };
+}
+
+//{"command":"command","value":"value","deviceId":"ead31f10c9610e41"}
+function processCommand(request, response) {
+  console.log('received command');
+  var command = {};
+  if (request.payload) {
+    console.log('Payload:');
+    console.dir(request.payload);
+    command.deviceId = request.payload.deviceId;
+    command.command = request.payload.command;
+    command.value = request.payload.value;
+  }
+  if (command.command && command.value) {
+    var outputMsg = new Message(JSON.stringify(command));
+    _client.sendOutputEvent('command', outputMsg, function (err,result) {
+      var responseBody = {};
+      var responseCode = 200;
+      if (err) {
+        resposeCode = 500;
+        responseBody = err.message;
+      } else {
+        responseBody = "command sent";
+      }
+      response.send(responseCode, responseBody, function (err) {
+        if (err) {
+          console.log('failed sending method response: ' + err);
+        } else {
+          console.log('successfully sent method response');
+        }
+      });
+    }
+  );
+}
+}
+
+function processTwinUpdate(twin, delta) {
+  console.log('processTwinUpdate');
+  console.log(delta);
 }
 
 initDB();

@@ -223,7 +223,10 @@ Client.fromEnvironment(Transport, function (err, client) {
             });
           };
           client.onMethod('config', function (request, response) {
-            processConfigRequest(request, response);
+            processRemoteConfig(request, response);
+          });
+          client.onMethod('status', function (request, response) {
+            processRemoteStatus(request, response);
           });
         });
       }
@@ -241,41 +244,6 @@ function processTwinUpdate(twin,delta) {
   }
 }
 
-
-
-function processConfigRequest(request, response) {
-  console.log('processConfigInvocation');
-  var changed = false;
-  if (request.payload) {
-    console.log('Request:' + JSON.stringify(requestPayload));
-    let content = request.payload;
-    if (content.zambrettiConf) {
-      let data = content.zambrettiConf;
-      for (const parm in zambrettiConf) {
-        if (data[parm]) {
-          changed = changed || true;
-          zambrettiConf[parm] = data[parm];
-        }
-      }
-    }
-  }
-  var responseBody = {}
-  var result = {}
-  if (changed) {
-    result.message = 'updated';
-    result.data = JSON.stringify({ newConf: zambrettiConf })
-  } else {
-    result.message = 'no update';
-  }
-  responseBody.result = result;
-  response.send(200, responseBody, function (err) {
-    if (err) {
-      console.log('failed sending method response: ' + err);
-    } else {
-      console.log('successfully sent method response');
-    }
-  });
-}
 
 function processMessage(client, inputName, msg) {
   client.complete(msg, printResultFor('Receiving message'));
@@ -392,14 +360,60 @@ function printResultFor(op) {
   };
 }
 
-
-function sendCommand(content) {
-  var command = {};
-  command.gatewayId = content.gatewayId;
-  command.deviceId = content.deviceId;
-  command.content = "sending:60"
-  var outputMsg = new Message(JSON.stringify(command));
-  _client.sendOutputEvent('command', outputMsg, printResultFor('Sending received message'));
+function processRemoteStatus(request, response) {
+  console.log('received status');
+  if (request.payload) {
+    console.log('Payload:');
+    console.dir(request.payload);
+  }
+  var responseBody = {};
+  responseBody.result = getStatusInfo();
+  response.send(200, responseBody, function (err) {
+    if (err) {
+      console.log('failed sending method response: ' + err);
+    } else {
+      console.log('successfully sent method response');
+    }
+  });
 }
+
+function processRemoteConfig(request, response) {
+  console.log('processConfigInvocation');
+  var changed = false;
+  if (request.payload) {
+    console.log('Request:' + JSON.stringify(requestPayload));
+    let content = request.payload;
+    if (content.zambrettiConf) {
+      let data = content.zambrettiConf;
+      for (const parm in zambrettiConf) {
+        if (data[parm]) {
+          changed = changed || true;
+          zambrettiConf[parm] = data[parm];
+        }
+      }
+    }
+  }
+  var responseBody = {}
+  var result = {}
+  if (changed) {
+    result.message = 'updated';
+    result.data = JSON.stringify({ newConf: zambrettiConf })
+  } else {
+    result.message = 'no update';
+  }
+  responseBody.result = result;
+  response.send(200, responseBody, function (err) {
+    if (err) {
+      console.log('failed sending method response: ' + err);
+    } else {
+      console.log('successfully sent method response');
+    }
+  });
+}
+
+function getStatusInfo() {
+  return { status: true, time:new Date().getTime() };
+}
+
 
 

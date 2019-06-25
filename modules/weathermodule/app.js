@@ -31,7 +31,7 @@ LEFT OUTER JOIN auditupload
 group by 1,2`;
 
 //*/15 * * * *
-const DEFAULT_SCHEDULING = '* * * * *';
+const DEFAULT_SCHEDULING = '*/15 * * * *';
 
 var _scheduling;
 
@@ -267,14 +267,6 @@ function getStatusInfo() {
 
 function reporTwinProperties(patch) {
   _client.getTwin(function (err, twin) {
-    // var patch = {
-    //   updateTime: new Date().toString(),
-    //   firmwareVersion:'1.2.1',
-    //   weather:{
-    //     temperature: 72,
-    //     humidity: 17
-    //   }
-    // };
     if (err) {
       console.log('Error obtaining twin');
     } else {

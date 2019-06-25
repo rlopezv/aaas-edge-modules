@@ -51,8 +51,11 @@ Client.fromEnvironment(Transport, function (err, client) {
                 processTwinUpdate(delta);
               });
           };
-          client.onMethod('remoteMethod', function(request, response) {
-            processRemoteInvocation(request,response);
+          client.onMethod('config', function (request, response) {
+            processRemoteConfig(request, response);
+          });
+          client.onMethod('status', function (request, response) {
+            processRemoteStatus(request, response);
           });
       });
       }
@@ -63,27 +66,8 @@ Client.fromEnvironment(Transport, function (err, client) {
 function processTwinUpdate(delta) {
   console.log('processTwinUpdate');
   console.log(delta);
-  if (delta.schedule) {
-    processScheduling(delta.schedule);
-  }
-
 }
 
-function processScheduling(exp) {
-  console.log('processScheduling');
-  if (_job && _job!=null) {
-    _job.cancel();
-  }
-  _job = Scheduler.scheduleJob(exp,function() {handleSchedule();});
-  console.log("Next invocation" + _job.nextInvocation());
-}
-
-function handleSchedule() {
-  console.log('handleSchedule');
-  var outputMsg = new Message("schedule");
-  _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed"));  
-  console.log("Next invocation" + _job.nextInvocation());
-}
 
 function processRemoteInvocation(request, response) {
   console.log('processRemoteInvocation');
@@ -191,4 +175,59 @@ function printResultFor(op) {
       console.log(op + ' status: ' + res.constructor.name);
     }
   };
+}
+
+function processRemoteStatus(request, response) {
+  console.log('received status');
+  if (request.payload) {
+    console.log('Payload:');
+    console.dir(request.payload);
+  }
+  var responseBody = {};
+  responseBody.result = getStatusInfo();
+  response.send(200, responseBody, function (err) {
+    if (err) {
+      console.log('failed sending method response: ' + err);
+    } else {
+      console.log('successfully sent method response');
+    }
+  });
+}
+
+function processRemoteConfig(request, response) {
+  console.log('processConfigInvocation');
+  var changed = false;
+  if (request.payload) {
+    console.log('Request:' + JSON.stringify(requestPayload));
+    let content = request.payload;
+    if (content.irriationConf) {
+      let data = content.irriationConf;
+      for (const parm in irriationConf) {
+        if (data[parm]) {
+          changed = changed || true;
+          irriationConf[parm] = data[parm];
+        }
+      }
+    }
+  }
+  var responseBody = {}
+  var result = {}
+  if (changed) {
+    result.message = 'updated';
+    result.data = JSON.stringify({ newConf: irriationConf })
+  } else {
+    result.message = 'no update';
+  }
+  responseBody.result = result;
+  response.send(200, responseBody, function (err) {
+    if (err) {
+      console.log('failed sending method response: ' + err);
+    } else {
+      console.log('successfully sent method response');
+    }
+  });
+}
+
+function getStatusInfo() {
+  return { status: true, time:new Date().getTime() };
 }

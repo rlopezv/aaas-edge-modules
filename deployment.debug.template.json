@@ -104,7 +104,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "rlopezviana/aaas-edge-nodered:0.0.2-amd64",
+              "image": "rlopezviana/aaas-edge-nodered:0.1.0-amd64",
               "createOptions": {
                 "HostConfig": {
                   "Privileged": true,
@@ -271,7 +271,8 @@
           "premiumweathermoduleToIoTHub": "FROM /messages/modules/premiumweathermodule/outputs/* INTO $upstream",
           "meesageDispatcherModuleToStatusModule": "FROM /messages/modules/messagedispatchermodule/outputs/status INTO BrokeredEndpoint(\"/modules/statusmodule/inputs/data\")",
           "statusmoduleToIoTHub": "FROM /messages/modules/statusmodule/outputs/* INTO $upstream",
-          "mesageDispatcherModuleToPremiumWeatherModule": "FROM /messages/modules/messagedispatchermodule/outputs/weather INTO BrokeredEndpoint(\"/modules/premiumweathermodule/inputs/data\")"
+          "mesageDispatcherModuleToPremiumWeatherModule": "FROM /messages/modules/messagedispatchermodule/outputs/weather INTO BrokeredEndpoint(\"/modules/premiumweathermodule/inputs/data\")",
+          "mesageDispatcherModuleTonoderedModule": "FROM /messages/modules/messagedispatchermodule/outputs/command INTO BrokeredEndpoint(\"/modules/nodered/inputs/command\")"
         },
         "storeAndForwardConfiguration": {
           "timeToLiveSecs": 7200
