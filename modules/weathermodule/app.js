@@ -160,6 +160,7 @@ function processLastSent(time, data, row) {
       console.log(`A row has been inserted`);
       if (row) {
       row.data = JSON.parse(row.data);
+      row.type = 'DATA';
       var outputMsg = new Message(JSON.stringify(row));
       _client.sendOutputEvent('weather', outputMsg, printResultFor('Sending last message'));
     } else {
@@ -208,13 +209,7 @@ function summary(data) {
 // This function just pipes the messages without any change.
 function processMessage(client, inputName, msg) {
   client.complete(msg, printResultFor('Receiving message'));
-  if (inputName === 'input1') {
-    var message = msg.getBytes().toString('utf8');
-    if (message) {
-      var outputMsg = new Message(message);
-      client.sendOutputEvent('output1', outputMsg, printResultFor('Sending received message'));
-    }
-  }
+  console.log('Does nothing');
 }
 
 // Helper function to print results in the console

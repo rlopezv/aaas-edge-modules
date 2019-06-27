@@ -168,7 +168,6 @@ function buildResult(data,msg) {
     result.gatewayTime = new Date(data.gatewayTime).getTime();
   }
   return result;
-
 }
 
 function processLastSent(time, data, row) {
@@ -185,9 +184,12 @@ function processLastSent(time, data, row) {
       // get the last insert id
       if (row && row.gwtime<time) {
           var result = buildResult(row,"Device not reported");
-          var outputMsg = new Message(JSON.stringify(result));
-          _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
-          _client.sendOutputEvent('status', outputMsg, printResultFor('Sending status message'));
+          result.type = 'ALERT';
+          var alertMsg = new Message(JSON.stringify(result));
+          _client.sendOutputEvent('alert', alertMsg, printResultFor('Sending alert message'));
+          result.type = 'STATUS';
+          var statusMsg = new Message(JSON.stringify(result));
+          _client.sendOutputEvent('status', statusMsg, printResultFor('Sending status message'));
           persistAlert(result);
       } else {
         console.log('No data to send');
@@ -210,6 +212,7 @@ function processMessage(client, inputName, msg) {
 function handleMessage(data) {
   //Publish message
   if (data.status) {
+    data.type = 'STATUS';
     var outputMsg = new Message(JSON.stringify(data));
     _client.sendOutputEvent('status', outputMsg, printResultFor('Sending status message'));
     handleAlerts(data);
@@ -219,7 +222,7 @@ function handleMessage(data) {
 function handleAlerts(content) {
   if (content.data) {
     var data = content.data;
-    if (content.status && content.status) {
+    if (content.status && !content.status) {
       var result = buildResult(content,"Device Sensors Errors");
       var outputMsg = new Message(JSON.stringify(result));
       _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));

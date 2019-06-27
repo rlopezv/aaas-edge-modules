@@ -172,6 +172,7 @@ function processLastSent(time, data, row) {
       console.log(`A row has been inserted`);
       if (row) {
         row.data = JSON.parse(row.data);
+        row.type = 'DATA';
         var outputMsg = new Message(JSON.stringify(row));
         _client.sendOutputEvent('gateway', outputMsg, printResultFor('Sending insert message'));
       } else {

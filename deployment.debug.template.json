@@ -104,7 +104,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "rlopezviana/aaas-edge-nodered:0.1.0-amd64",
+              "image": "rlopezviana/aaas-edge-nodered:0.2.0-amd64",
               "createOptions": {
                 "HostConfig": {
                   "Privileged": true,
@@ -263,8 +263,16 @@
       "properties.desired": {
         "schemaVersion": "1.0",
         "routes": {
+          "mesageDispatcherModuleToPremiumWeatherModule": "FROM /messages/modules/messagedispatchermodule/outputs/weather INTO BrokeredEndpoint(\"/modules/premiumweathermodule/inputs/data\")",
+          "mesageDispatcherModuleToPremiumPlantModule": "FROM /messages/modules/messagedispatchermodule/outputs/plant INTO BrokeredEndpoint(\"/modules/premiumplantmodule/inputs/data\")",
           "noderedToMessageDispatcherModule": "FROM /messages/modules/nodered/outputs/* INTO BrokeredEndpoint(\"/modules/messagedispatchermodule/inputs/message\")",
-          "meesageDispatcherModuleToStatusModule": "FROM /messages/modules/messagedispatchermodule/outputs/status INTO BrokeredEndpoint(\"/modules/statusmodule/inputs/data\")"
+          "mesageDispatcherModuleToStatusModule": "FROM /messages/modules/messagedispatchermodule/outputs/status INTO BrokeredEndpoint(\"/modules/statusmodule/inputs/data\")",
+          "mesageDispatcherModuleTonoderedModule": "FROM /messages/modules/messagedispatchermodule/outputs/command INTO BrokeredEndpoint(\"/modules/nodered/inputs/command\")",
+          "weathermoduleToIoTHub": "FROM /messages/modules/weathermodule/outputs/* INTO $upstream",
+          "plantmoduleToIoTHub": "FROM /messages/modules/plantmodule/outputs/* INTO $upstream",
+          "statusmoduleToIoTHub": "FROM /messages/modules/statusmodule/outputs/* INTO $upstream",
+          "premiumPlantModuleToIoTHub": "FROM /messages/modules/plantpremiummodule/outputs/* INTO $upstream",
+          "premiumweathermoduleToIoTHub": "FROM /messages/modules/premiumweathermodule/outputs/* INTO $upstream"
         },
         "storeAndForwardConfiguration": {
           "timeToLiveSecs": 7200

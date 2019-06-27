@@ -222,12 +222,12 @@ Client.fromEnvironment(Transport, function (err, client) {
               processTwinUpdate(twin,delta);
             });
           };
-          client.onMethod('config', function (request, response) {
-            processRemoteConfig(request, response);
-          });
-          client.onMethod('status', function (request, response) {
-            processRemoteStatus(request, response);
-          });
+        });
+        client.onMethod('config', function (request, response) {
+          processRemoteConfig(request, response);
+        });
+        client.onMethod('status', function (request, response) {
+          processRemoteStatus(request, response);
         });
       }
     });
@@ -237,11 +237,6 @@ Client.fromEnvironment(Transport, function (err, client) {
 function processTwinUpdate(twin,delta) {
   console.log('processTwinUpdate');
   console.log(delta);
-  if (delta.schedule) {
-    processScheduling(delta.schedule);
-  } else {
-    console.log('No scheduling');
-  }
 }
 
 
@@ -257,6 +252,7 @@ function processMessage(client, inputName, msg) {
 
 function handleMessage(data) {
   var result;
+  data.type = 'DATA';
   //Publish message
   var outputMsg = new Message(JSON.stringify(data));
   _client.sendOutputEvent('data', outputMsg, printResultFor('Sending received message'));
@@ -270,6 +266,25 @@ function handleAlerts(content) {
     processTrend(content);
     //z_hpa, z_month, z_wind, z_trend, z_hemisphere, z_upper, z_lower
 
+  }
+  return result;
+}
+
+function buildResult(data, msg) {
+  var result = {};
+  result.application = data.application;
+  result.gateway = data.gateway;
+  result.gatewayId = data.gatewayId ? data.gatewayId : data.gatewayid;
+  result.device = data.device;
+  result.deviceId = data.deviceId ? data.deviceId : data.deviceid;
+  result.deviceType = data.deviceType ? data.deviceType : data.devicetype;
+  result.data = data.data;
+  result.message = msg;
+  result.status = false;
+  if (data.gwtime) {
+    result.gatewayTime = data.gwtime;
+  } else {
+    result.gatewayTime = new Date(data.gatewayTime).getTime();
   }
   return result;
 }
@@ -299,7 +314,6 @@ function processTrend(content) {
       console.log('Error retrieving data');
     } else {
       if (res.rows && res.rows.length == 1) {
-        var result = {};
         var data = content.data;
         let trend = obtainTrend(data, res.rows[0]);
         if (trend>0) {
@@ -308,14 +322,14 @@ function processTrend(content) {
             var alertMessage = {};
             alertMessage.message = forecast[0];
             alertMessage.severity = forecast[1];
-            result.message = alertMessage;
           }
-          if (result.message) {
-            result.data = content;
+          if (alertMessage.message) {
+            var result = buildResult(content,alertMessage.message);
+            result.type = 'ALERT';
             console.log("publish weather message");
             var outputMsg = new Message(JSON.stringify(result));
             _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
-            persistAlert(content, result);
+            persistAlert(result);
           }
           console.log(result);
         }
@@ -377,11 +391,12 @@ function processRemoteStatus(request, response) {
   });
 }
 
+//{"zambrettiConf":{"defaultWind":0}}
 function processRemoteConfig(request, response) {
   console.log('processConfigInvocation');
   var changed = false;
   if (request.payload) {
-    console.log('Request:' + JSON.stringify(requestPayload));
+    console.log('Request:' + JSON.stringify(request.payload));
     let content = request.payload;
     if (content.zambrettiConf) {
       let data = content.zambrettiConf;
@@ -391,6 +406,7 @@ function processRemoteConfig(request, response) {
           zambrettiConf[parm] = data[parm];
         }
       }
+      reporTwinProperties({ zambrettiConf: zambrettiConf });
     }
   }
   var responseBody = {}
@@ -415,5 +431,18 @@ function getStatusInfo() {
   return { status: true, time:new Date().getTime() };
 }
 
+function reporTwinProperties(patch) {
+  _client.getTwin(function (err, twin) {
+    if (err) {
+      console.log('Error obtaining twin');
+    } else {
+      // send the patch
+      twin.properties.reported.update(patch, function (err) {
+        if (err) throw err;
+        console.log('twin state reported');
+      });
+    }
+  });
+}
 
 

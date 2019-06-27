@@ -17,11 +17,12 @@ const ALERT_INSERT = `INSERT INTO alert (
   application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`;
 
-var irriationConf = {
-  SM_MIN : 10,
-  SM_MAX : 60,  
+var irrigationConf = {
+  SM_MIN: 10,
+  SM_MAX: 60,
   HUM_MIN: 20,
-  TEMP_MAX : 35
+  HUM_MAX: 80,
+  TEMP_MAX: 35
 }
 
 Client.fromEnvironment(Transport, function (err, client) {
@@ -45,19 +46,20 @@ Client.fromEnvironment(Transport, function (err, client) {
         });
         client.getTwin(function (err, twin) {
           if (err) {
-              console.error('Error getting twin: ' + err.message);
+            console.error('Error getting twin: ' + err.message);
           } else {
-              twin.on('properties.desired', function(delta) {
-                processTwinUpdate(delta);
-              });
+            twin.on('properties.desired', function (delta) {
+              processTwinUpdate(delta);
+            });
           };
-          client.onMethod('config', function (request, response) {
-            processRemoteConfig(request, response);
-          });
-          client.onMethod('status', function (request, response) {
-            processRemoteStatus(request, response);
-          });
-      });
+        });
+        client.onMethod('config', function (request, response) {
+          processRemoteConfig(request, response);
+        });
+        client.onMethod('status', function (request, response) {
+          processRemoteStatus(request, response);
+        });
+
       }
     });
   }
@@ -71,14 +73,14 @@ function processTwinUpdate(delta) {
 
 function processRemoteInvocation(request, response) {
   console.log('processRemoteInvocation');
-  if(request.payload) {
+  if (request.payload) {
     console.log('Payload:');
     console.dir(request.payload);
   }
   var responseBody = {
     message: 'remoteMethod'
   };
-  response.send(200, responseBody, function(err) {
+  response.send(200, responseBody, function (err) {
     if (err) {
       console.log('failed sending method response: ' + err);
     } else {
@@ -101,62 +103,74 @@ function processMessage(client, inputName, msg) {
 function handleMessage(data) {
   var result;
   //Publish message
+  data.type = 'DATA';
   var outputMsg = new Message(JSON.stringify(data));
   _client.sendOutputEvent('data', outputMsg, printResultFor('Sending received message'));
   handleAlerts(data);
 }
 
-function handleAlerts(content) {
- 
+function buildResult(data, msg) {
   var result = {};
-   
+  result.application = data.application;
+  result.gateway = data.gateway;
+  result.gatewayId = data.gatewayId ? data.gatewayId : data.gatewayid;
+  result.device = data.device;
+  result.deviceId = data.deviceId ? data.deviceId : data.deviceid;
+  result.deviceType = data.deviceType ? data.deviceType : data.devicetype;
+  result.data = data.data;
+  result.message = msg;
+  result.status = false;
+  if (data.gwtime) {
+    result.gatewayTime = data.gwtime;
+  } else {
+    result.gatewayTime = new Date(data.gatewayTime).getTime();
+  }
+  return result;
+}
+
+function handleAlerts(content) {
   if (content.data) {
     var data = content.data;
-    if (data.sm<irriationConf.SM_MIN) {
+    if (data.sm > irrigationConf.SM_MAX) {
+      var alertMessage = {};
+      alertMessage.message = 'High Soil Moisture';
+    } else if (data.sm < irrigationConf.SM_MIN) {
       var alertMessage = {};
       alertMessage.message = 'Low Soil Moisture';
       alertMessage.irrigation = true;
-      result.message = alertMessage;
-    }
-  
-    if (data.humidity < irriationConf.HUM_MIN && data.sm<irriationConf.SM_MAX) {
+    } else if (data.humidity < irrigationConf.HUM_MIN && data.sm < irrigationConf.SM_MAX) {
       var alertMessage = {};
       alertMessage.message = 'Low Air Humidty';
       alertMessage.irrigation = true;
-      result.message = alertMessage;
-    }
-  
-    if (data.temperature > irriationConf.TEMP_MAX && data.sm<irriationConf.SM_MAX) {
+    } else if (data.temperature > irrigationConf.TEMP_MAX && data.sm < irrigationConf.SM_MAX) {
       var alertMessage = {};
       alertMessage.message = 'High temperature';
       alertMessage.irrigation = true;
-      result.message = alertMessage;
     }
-
-  
-    if (result.message) {
-      result.data = content;
-      console.log("publish irrigation message");
+    if (alertMessage) {
+      var result = buildResult(content, alertMessage.message);
+      console.log("publish alert message");
+      result.type = 'ALERT';
       var outputMsg = new Message(JSON.stringify(result));
       _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
-      persistAlert(content,result);
+      persistAlert(result);
     }
   }
 }
 
-function persistAlert(message, result) {
+function persistAlert(message) {
   //application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime
   return pool.query(ALERT_INSERT, [message.application,
   message.gateway,
   message.gatewayId,
   message.device,
   message.deviceId,
-  message.deviceType?message.deviceType:"DEFAULT",
+  message.deviceType,
   JSON.stringify(message.data),
-  JSON.stringify(result.message),
+  message.message,
   new Date(message.gatewayTime).getTime(),
   new Date().getTime()
-], (err, res) => {
+  ], (err, res) => {
     if (err) {
       return console.log(err.message);
     }
@@ -193,28 +207,29 @@ function processRemoteStatus(request, response) {
     }
   });
 }
-
+//{"irrigationConf":{"SM_MIN":20}}
 function processRemoteConfig(request, response) {
   console.log('processConfigInvocation');
   var changed = false;
   if (request.payload) {
-    console.log('Request:' + JSON.stringify(requestPayload));
+    console.log('Request:' + JSON.stringify(request.payload));
     let content = request.payload;
-    if (content.irriationConf) {
-      let data = content.irriationConf;
-      for (const parm in irriationConf) {
+    if (content.irrigationConf) {
+      let data = content.irrigationConf;
+      for (const parm in irrigationConf) {
         if (data[parm]) {
           changed = changed || true;
-          irriationConf[parm] = data[parm];
+          irrigationConf[parm] = data[parm];
         }
       }
+      reporTwinProperties({ irrigationConf: irrigationConf });
     }
   }
   var responseBody = {}
   var result = {}
   if (changed) {
     result.message = 'updated';
-    result.data = JSON.stringify({ newConf: irriationConf })
+    result.data = JSON.stringify({ newConf: irrigationConf })
   } else {
     result.message = 'no update';
   }
@@ -229,5 +244,19 @@ function processRemoteConfig(request, response) {
 }
 
 function getStatusInfo() {
-  return { status: true, time:new Date().getTime() };
+  return { status: true, time: new Date().getTime() };
+}
+
+function reporTwinProperties(patch) {
+  _client.getTwin(function (err, twin) {
+    if (err) {
+      console.log('Error obtaining twin');
+    } else {
+      // send the patch
+      twin.properties.reported.update(patch, function (err) {
+        if (err) throw err;
+        console.log('twin state reported');
+      });
+    }
+  });
 }
