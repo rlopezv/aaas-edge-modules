@@ -119,47 +119,6 @@
               }
             }
           },
-          "logmodule": {
-            "version": "1.0",
-            "type": "docker",
-            "status": "running",
-            "restartPolicy": "always",
-            "settings": {
-              "image": "${MODULES.logmodule.debug}",
-              "createOptions": {}
-            }
-          },
-          "plantmodule": {
-            "version": "1.0",
-            "type": "docker",
-            "status": "running",
-            "restartPolicy": "always",
-            "settings": {
-              "image": "${MODULES.plantmodule.debug}",
-              "createOptions": {
-                "HostConfig": {
-                  "Privileged": true,
-                  "PortBindings": {
-                    "9229/tcp": [
-                      {
-                        "HostPort": "9239"
-                      }
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "premiumplantmodule": {
-            "version": "1.0",
-            "type": "docker",
-            "status": "running",
-            "restartPolicy": "always",
-            "settings": {
-              "image": "${MODULES.premiumplantmodule.debug}",
-              "createOptions": {}
-            }
-          },
           "messagedispatchermodule": {
             "version": "1.0",
             "type": "docker",
@@ -186,6 +145,48 @@
               }
             }
           },
+          "plantmodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.plantmodule.debug}",
+              "createOptions": {
+                "HostConfig": {
+                  "Privileged": true,
+                  "PortBindings": {
+                    "9229/tcp": [
+                      {
+                        "HostPort": "9439"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "premiumplantmodule": {
+            "version": "1.0",
+            "type": "docker",
+            "status": "running",
+            "restartPolicy": "always",
+            "settings": {
+              "image": "${MODULES.premiumplantmodule.debug}",
+              "createOptions": {
+                "HostConfig": {
+                  "Privileged": true,
+                  "PortBindings": {
+                    "9229/tcp": [
+                      {
+                        "HostPort": "9449"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
           "weathermodule": {
             "version": "1.0",
             "type": "docker",
@@ -201,7 +202,7 @@
                   "PortBindings": {
                     "9229/tcp": [
                       {
-                        "HostPort": "9289"
+                        "HostPort": "9459"
                       }
                     ]
                   }
@@ -224,7 +225,7 @@
                   "PortBindings": {
                     "9229/tcp": [
                       {
-                        "HostPort": "9269"
+                        "HostPort": "9469"
                       }
                     ]
                   }
@@ -247,7 +248,7 @@
                   "PortBindings": {
                     "9229/tcp": [
                       {
-                        "HostPort": "9329"
+                        "HostPort": "9479"
                       }
                     ]
                   }
@@ -262,17 +263,8 @@
       "properties.desired": {
         "schemaVersion": "1.0",
         "routes": {
-          "noderedToMessageDispatcherModule": "FROM /messages/modules/nodered/outputs/* INTO BrokeredEndpoint(\"/modules/messagedispatchermodule/inputs/input1\")",
-          "weathermoduleToIoTHub": "FROM /messages/modules/weathermodule/outputs/* INTO $upstream",
-          "plantmoduleToIoTHub": "FROM /messages/modules/plantmodule/outputs/* INTO $upstream",
-          "mesageDispatcherModuleToPremiumPlantModule": "FROM /messages/modules/messagedispatchermodule/outputs/plant INTO BrokeredEndpoint(\"/modules/premiumplantmodule/inputs/data\")",
-          "premiumPlantModuleToIoTHub": "FROM /messages/modules/plantpremiummodule/outputs/* INTO $upstream",
-          "pgToIoTHub": "FROM /messages/modules/pg/outputs/* INTO $upstream",
-          "premiumweathermoduleToIoTHub": "FROM /messages/modules/premiumweathermodule/outputs/* INTO $upstream",
-          "meesageDispatcherModuleToStatusModule": "FROM /messages/modules/messagedispatchermodule/outputs/status INTO BrokeredEndpoint(\"/modules/statusmodule/inputs/data\")",
-          "statusmoduleToIoTHub": "FROM /messages/modules/statusmodule/outputs/* INTO $upstream",
-          "mesageDispatcherModuleToPremiumWeatherModule": "FROM /messages/modules/messagedispatchermodule/outputs/weather INTO BrokeredEndpoint(\"/modules/premiumweathermodule/inputs/data\")",
-          "mesageDispatcherModuleTonoderedModule": "FROM /messages/modules/messagedispatchermodule/outputs/command INTO BrokeredEndpoint(\"/modules/nodered/inputs/command\")"
+          "noderedToMessageDispatcherModule": "FROM /messages/modules/nodered/outputs/* INTO BrokeredEndpoint(\"/modules/messagedispatchermodule/inputs/message\")",
+          "meesageDispatcherModuleToStatusModule": "FROM /messages/modules/messagedispatchermodule/outputs/status INTO BrokeredEndpoint(\"/modules/statusmodule/inputs/data\")"
         },
         "storeAndForwardConfiguration": {
           "timeToLiveSecs": 7200

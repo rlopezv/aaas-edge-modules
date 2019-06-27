@@ -22,7 +22,7 @@ const DATA_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, d
 FROM telemetry where deviceType = 'PLANT' and gwTime > $1`;
 
 const DATA_LAST_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
-FROM telemetry where deviceType = 'PLANT' and gwTime > $1 limit 1`;
+FROM telemetry where deviceType = 'PLANT' and gwTime > $2 and deviceId = $1 ORDER BY  gwTime DESC limit 1`;
 
 const UPDATE_LAST_SEND = `
 UPDATE auditupload set uploadtime = $3
@@ -35,6 +35,7 @@ const SELECT_LAST_SEND = `select telemetry.deviceId as deviceId,telemetry.device
 from telemetry
 LEFT OUTER JOIN auditupload
     ON auditupload.deviceId=telemetry.deviceId
+WHERE telemetry.deviceType = 'PLANT'
 group by 1,2`;
 
 const DEFAULT_SCHEDULING = '*/15 * * * *';
@@ -66,7 +67,7 @@ Client.fromEnvironment(Transport, function (err, client) {
             console.error('Error getting twin: ' + err.message);
           } else {
             twin.on('properties.desired', function (delta) {
-              processTwinUpdate(delta);
+              processTwinUpdate(twin,delta);
             });
           };
           client.onMethod('config', function (request, response) {
@@ -81,10 +82,10 @@ Client.fromEnvironment(Transport, function (err, client) {
   }
 });
 
-function processTwinUpdate(delta) {
+function processTwinUpdate(twin,delta) {
   console.log('processTwinUpdate');
   console.log(delta);
-  if (delta.schedule) {
+  if (delta.schedule && !twin.properties.reported.schedule) {
     processScheduling(delta.schedule);
   } else {
     if (!_scheduling) {
@@ -143,34 +144,39 @@ function processLastMeasure(data) {
     fromTime = 0;
   }
 
-  pool.query(DATA_LAST_SELECT, [fromTime], (err, res) => {
+  pool.query(DATA_LAST_SELECT, [data.deviceid,fromTime], (err, res) => {
     if (err) {
       console.log('Error retrieving data');
     } else {
       if (res.rows && res.rows.length == 1) {
-        processLastSent(fromTime, res.rows[0]);
+        processLastSent(fromTime,data, res.rows[0]);
+      } else {
+        processLastSent(fromTime,data);
       }
     }
   });
 }
 
-function processLastSent(time, row) {
-  var sentTime = time;
+function processLastSent(time, data, row) {
+  var sentTime = new Date().getTime();
   var query = UPDATE_LAST_SEND;
-  if (sentTime == 0) {
-    sentTime = new Date().getTime();
+  if (time == 0) {
     query = INSERT_LAST_SEND;
   }
-  pool.query(query, [row.deviceid,
-  row.devicetype, sentTime], (err, res) => {
+  pool.query(query, [data.deviceid,
+  data.devicetype, sentTime], (err, res) => {
     if (err) {
       return console.log(err.message);
     } else {
       // get the last insert id
       console.log(`A row has been inserted`);
-      row.data = JSON.parse(row.data);
-      var outputMsg = new Message(JSON.stringify(row));
-      _client.sendOutputEvent('gateway', outputMsg, printResultFor('Sending join message'));
+      if (row) {
+        row.data = JSON.parse(row.data);
+        var outputMsg = new Message(JSON.stringify(row));
+        _client.sendOutputEvent('gateway', outputMsg, printResultFor('Sending insert message'));
+      } else {
+        console.log('No data to send');
+      }
     }
   });
 

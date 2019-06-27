@@ -3,6 +3,7 @@
 var Transport = require('azure-iot-device-mqtt').Mqtt;
 var Client = require('azure-iot-device').ModuleClient;
 var Message = require('azure-iot-device').Message;
+var Scheduler = require('node-schedule');
 const { Pool } = require('pg');
 const connectionString = 'postgresql://postgres:docker@postgres/aaas_db';
 const poolConfig = {
@@ -18,9 +19,30 @@ const ALERT_INSERT = `INSERT INTO alert (
   application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`;
 
+ const DATA_LAST_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
+ FROM status where deviceId = $1 ORDER BY  gwTime DESC limit 1`;
+ 
+ const UPDATE_LAST_SEND = `
+ UPDATE auditupload set uploadtime = $3
+ WHERE deviceId = $1 AND deviceType = $2`;
+ 
+ const INSERT_LAST_SEND = `
+ INSERT INTO auditupload (deviceId, deviceType, uploadtime)
+ VALUES ($1,$2,$3)`;
+
+ const SELECT_LAST_SEND = `select status.deviceId as deviceId, MAX(auditupload.uploadtime) as uploadtime
+ from status
+ LEFT OUTER JOIN auditupload
+     ON auditupload.deviceId=status.deviceId 
+     AND auditupload.deviceType = 'STATUS'
+ group by 1`;
+
 var statusConf = {
   NOTIFICATION_PERIOD: 1
 }
+
+const DEFAULT_SCHEDULING = '*/15 * * * *';
+var _scheduling;
 
 Client.fromEnvironment(Transport, function (err, client) {
   if (err) {
@@ -46,7 +68,7 @@ Client.fromEnvironment(Transport, function (err, client) {
             console.error('Error getting twin: ' + err.message);
           } else {
             twin.on('properties.desired', function (delta) {
-              processTwinUpdate(delta);
+              processTwinUpdate(twin,delta);
             });
           };
           client.onMethod('config', function (request, response) {
@@ -61,47 +83,118 @@ Client.fromEnvironment(Transport, function (err, client) {
   }
 });
 
-function processTwinUpdate(delta) {
+function processTwinUpdate(twin, delta) {
   console.log('processTwinUpdate');
   console.log(delta);
-  if (delta.schedule) {
+  if (delta.schedule && !twin.properties.reported.schedule) {
     processScheduling(delta.schedule);
+  } else {
+    if (!_scheduling) {
+      if (twin.properties.reported.schedule) {
+        processScheduling(twin.properties.reported.schedule);
+      } else {
+        processScheduling(DEFAULT_SCHEDULING);
+      }
+    }
   }
-
 }
 
 function processScheduling(exp) {
   console.log('processScheduling');
-  if (_job && _job != null) {
-    _job.cancel();
+  if (exp !== _scheduling) {
+    if (_job && _job != null) {
+      _job.cancel();
+    }
+    _scheduling = exp;
+    _job = Scheduler.scheduleJob(exp, function () { handleSchedule(exp); });
+    reporTwinProperties({ schedule: exp });
   }
-  _job = Scheduler.scheduleJob(exp, function () { handleSchedule(); });
-  console.log("Next invocation" + _job.nextInvocation());
 }
 
 function handleSchedule() {
   console.log('handleSchedule');
-  var outputMsg = new Message("schedule");
-  _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed"));
+  processLastMeasures();
   console.log("Next invocation" + _job.nextInvocation());
 }
 
-function processRemoteInvocation(request, response) {
-  console.log('processRemoteInvocation');
-  if (request.payload) {
-    console.log('Payload:');
-    console.dir(request.payload);
-  }
-  var responseBody = {
-    message: 'remoteMethod'
-  };
-  response.send(200, responseBody, function (err) {
+function processLastMeasures(data) {
+  pool.query(SELECT_LAST_SEND, [], (err, res) => {
     if (err) {
-      console.log('failed sending method response: ' + err);
+      console.log('Error retrieving data');
     } else {
-      console.log('successfully sent method response');
+      if (res.rows && res.rows.length > 0) {
+        for (var row of res.rows) {
+          processLastMeasure(row);
+        }
+      }
+    }
+  })
+}
+
+function processLastMeasure(data) {
+
+  var fromTime = data.uploadtime;
+  if (!fromTime || fromTime == null) {
+    fromTime = 0;
+  }
+
+  pool.query(DATA_LAST_SELECT, [data.deviceid], (err, res) => {
+    if (err) {
+      console.log('Error retrieving data');
+    } else {
+      if (res.rows && res.rows.length == 1) {
+        processLastSent(fromTime,data, res.rows[0]);
+      } else {
+        processLastSent(fromTime,data);
+      }
     }
   });
+}
+
+function buildResult(data,msg) {
+  var result = {};
+  result.application = data.application;
+  result.gateway = data.gateway;
+  result.gatewayId = data.gatewayId?data.gatewayId:data.gatewayid;
+  result.device = data.device;
+  result.deviceId = data.deviceId?data.deviceId:data.deviceid;
+  result.deviceType = data.deviceType?data.deviceType:data.devicetype;
+  result.data = data.data;
+  result.message = msg;
+  result.status = false;
+  if (data.gwtime) {
+    result.gatewayTime = data.gwtime;
+  } else {
+    result.gatewayTime = new Date(data.gatewayTime).getTime();
+  }
+  return result;
+
+}
+
+function processLastSent(time, data, row) {
+  var sentTime = new Date().getTime();
+  var query = UPDATE_LAST_SEND;
+  if (time == 0) {
+    query = INSERT_LAST_SEND;
+  }
+  pool.query(query, [data.deviceid,
+  'STATUS', sentTime], (err, res) => {
+    if (err) {
+      return console.log(err.message);
+    } else {
+      // get the last insert id
+      if (row && row.gwtime<time) {
+          var result = buildResult(row,"Device not reported");
+          var outputMsg = new Message(JSON.stringify(result));
+          _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
+          _client.sendOutputEvent('status', outputMsg, printResultFor('Sending status message'));
+          persistAlert(result);
+      } else {
+        console.log('No data to send');
+    }
+    }
+  });
+
 }
 
 function processMessage(client, inputName, msg) {
@@ -118,42 +211,34 @@ function handleMessage(data) {
   //Publish message
   if (data.status) {
     var outputMsg = new Message(JSON.stringify(data));
-    _client.sendOutputEvent('data', outputMsg, printResultFor('Sending status message'));
+    _client.sendOutputEvent('status', outputMsg, printResultFor('Sending status message'));
     handleAlerts(data);
   }
 }
 
 function handleAlerts(content) {
-  var result = {};
-
   if (content.data) {
     var data = content.data;
-    if (content.status && !content.status) {
-      result.message = {};
-      result.message.message = "Device Sensors Errors";
-      result.data = data;
-      if (!_lastNotification || new Date().getTime() > _lastNotification.getTime() + statusConf.NOTIFICATION_PERIOD * 60 * 1000) {
-        var outputMsg = new Message(JSON.stringify(result));
-        _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
-        _lastNotification = new Date();
-      }
-      
-      persistAlert(content,result);
+    if (content.status && content.status) {
+      var result = buildResult(content,"Device Sensors Errors");
+      var outputMsg = new Message(JSON.stringify(result));
+      _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
+      persistAlert(result);
     }
   }
 }
 
-function persistAlert(message, result) {
+function persistAlert(result) {
   //application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime
-  return pool.query(ALERT_INSERT, [message.application,
-  message.gateway,
-  message.gatewayId,
-  message.device,
-  message.deviceId,
-  message.deviceType?message.deviceType:"DEFAULT",
-  JSON.stringify(message.data),
-  JSON.stringify(result.message),
-  new Date(message.gatewayTime).getTime(),
+  return pool.query(ALERT_INSERT, [result.application,
+  result.gateway,
+  result.gatewayId,
+  result.device,
+  result.deviceId,
+  result.deviceType,
+  JSON.stringify(result.data),
+  result.message,
+  result.gatewayTime,
   new Date().getTime()
 ], (err, res) => {
     if (err) {
@@ -195,10 +280,13 @@ function processRemoteStatus(request, response) {
 
 function processRemoteConfig(request, response) {
   console.log('received configuration');
-  var content = null; 
+  var content = null;
   if (request.payload) {
     console.log(request.payload);
     content = request.payload;
+  }
+  if (content.scheduling) {
+    processScheduling(content.scheduling);
   }
   var responseBody = {
     message: 'processed'
@@ -214,4 +302,18 @@ function processRemoteConfig(request, response) {
 
 function getStatusInfo() {
   return { status: true, time:new Date().getTime() };
+}
+
+function reporTwinProperties(patch) {
+  _client.getTwin(function (err, twin) {
+    if (err) {
+      console.log('Error obtaining twin');
+    } else {
+      // send the patch
+      twin.properties.reported.update(patch, function (err) {
+        if (err) throw err;
+        console.log('twin state reported');
+      });
+    }
+  });
 }

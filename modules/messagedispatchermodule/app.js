@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS status (
   gatewayId text NOT NULL,
   device text NOT NULL,
   deviceId text NOT NULL,
+  deviceType text NOT NULL,
   data text,
   status boolean,
   gwTime BIGINT NOT NULL,
@@ -83,8 +84,8 @@ const GATEWAY_SCHEMA = `CREATE TABLE IF NOT EXISTS gateway (
 )`
 
 const STATUS_INSERT = `INSERT INTO status (
-  application, gateway, gatewayId, device, deviceId, data, status,gwTime,edgeTime)
- VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`;
+  application, gateway, gatewayId, device, deviceId, deviceType, data, status,gwTime,edgeTime)
+ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`;
 const DATA_INSERT = `INSERT INTO telemetry (
   application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`;
@@ -139,12 +140,14 @@ Client.fromEnvironment(Transport, function (err, client) {
 // This function just pipes the messages without any change.
 function processMessage(client, inputName, msg) {
   client.complete(msg, printResultFor('Receiving message'));
-  if (inputName === 'input1') {
+  if (inputName === 'message') {
     var message = msg.getBytes().toString('utf8');
     //Dispatches over data
     if (message) {
       handleMessage(JSON.parse(message));
     }
+  } else {
+    console.log(`Unknown message (%s):%s`,inputName,msg.getBytes().toString('utf8'));
   }
 }
 
@@ -186,7 +189,7 @@ function handleJoin(message) {
     }
     // get the last insert id
     console.log(`A row has been inserted`);
-    var outputMsg = new Message(message);
+    var outputMsg = new Message(JSON.stringify(message));
     _client.sendOutputEvent('gateway', outputMsg, printResultFor('Sending join message'));
   });
 }
@@ -220,6 +223,7 @@ function handleStatus(message) {
   message.gatewayId,
   message.device,
   message.deviceId,
+  message.deviceType,
   JSON.stringify(message.data),
   message.status,
   new Date(message.gatewayTime).getTime(),
