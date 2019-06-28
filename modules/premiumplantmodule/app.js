@@ -14,7 +14,7 @@ var _job;
 var _client;
 
 const ALERT_INSERT = `INSERT INTO alert (
-  application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime)
+  application, gateway, gateway_id, device, device_id, device_type, data, message,gw_time,edge_time)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`;
 
 var irrigationConf = {
@@ -113,17 +113,17 @@ function buildResult(data, msg) {
   var result = {};
   result.application = data.application;
   result.gateway = data.gateway;
-  result.gatewayId = data.gatewayId ? data.gatewayId : data.gatewayid;
+  result.gateway_id = data.gateway_id ? data.gateway_id : data.gateway_id;
   result.device = data.device;
-  result.deviceId = data.deviceId ? data.deviceId : data.deviceid;
-  result.deviceType = data.deviceType ? data.deviceType : data.devicetype;
+  result.device_id = data.device_id ? data.device_id : data.device_id;
+  result.device_type = data.device_type ? data.device_type : data.device_type;
   result.data = data.data;
   result.message = msg;
   result.status = false;
-  if (data.gwtime) {
-    result.gatewayTime = data.gwtime;
+  if (data.gw_time) {
+    result.gateway_time = data.gw_time;
   } else {
-    result.gatewayTime = new Date(data.gatewayTime).getTime();
+    result.gateway_time = new Date(data.gateway_time).getTime();
   }
   return result;
 }
@@ -159,16 +159,16 @@ function handleAlerts(content) {
 }
 
 function persistAlert(message) {
-  //application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime
+  //application, gateway, gateway_id, device, device_id, device_type, data, message,gw_time,edge_time
   return pool.query(ALERT_INSERT, [message.application,
   message.gateway,
-  message.gatewayId,
+  message.gateway_id,
   message.device,
-  message.deviceId,
-  message.deviceType,
+  message.device_id,
+  message.device_type,
   JSON.stringify(message.data),
   message.message,
-  new Date(message.gatewayTime).getTime(),
+  new Date(message.gateway_time).getTime(),
   new Date().getTime()
   ], (err, res) => {
     if (err) {

@@ -18,24 +18,24 @@ const poolConfig = {
 };
 const pool = new Pool(poolConfig);
 
-const DATA_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
-FROM telemetry where deviceType = 'PLANT' and gwTime > $1`;
+const DATA_SELECT = `SELECT application, gateway, gateway_id, device, device_id, device_type, data,gw_time,edge_time 
+FROM telemetry where device_type = 'PLANT' and gw_time > $1`;
 
-const DATA_LAST_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
-FROM telemetry where deviceType = 'PLANT' and gwTime > $2 and deviceId = $1 ORDER BY  gwTime DESC limit 1`;
+const DATA_LAST_SELECT = `SELECT application, gateway, gateway_id, device, device_id, device_type, data,gw_time,edge_time 
+FROM telemetry where device_type = 'PLANT' and gw_time > $2 and device_id = $1 ORDER BY  gw_time DESC limit 1`;
 
 const UPDATE_LAST_SEND = `
 UPDATE auditupload set uploadtime = $3
-WHERE deviceId = $1 AND deviceType = $2`;
+WHERE device_id = $1 AND device_type = $2`;
 
 const INSERT_LAST_SEND = `
-INSERT INTO auditupload (deviceId, deviceType, uploadtime)
+INSERT INTO auditupload (device_id, device_type, uploadtime)
 VALUES ($1,$2,$3)`;
-const SELECT_LAST_SEND = `select telemetry.deviceId as deviceId,telemetry.deviceType as deviceType, MAX(auditupload.uploadtime) as uploadtime
+const SELECT_LAST_SEND = `select telemetry.device_id as device_id,telemetry.device_type as device_type, MAX(auditupload.uploadtime) as uploadtime
 from telemetry
 LEFT OUTER JOIN auditupload
-    ON auditupload.deviceId=telemetry.deviceId
-WHERE telemetry.deviceType = 'PLANT'
+    ON auditupload.device_id=telemetry.device_id
+WHERE telemetry.device_type = 'PLANT'
 group by 1,2`;
 
 const DEFAULT_SCHEDULING = '*/15 * * * *';
@@ -144,7 +144,7 @@ function processLastMeasure(data) {
     fromTime = 0;
   }
 
-  pool.query(DATA_LAST_SELECT, [data.deviceid,fromTime], (err, res) => {
+  pool.query(DATA_LAST_SELECT, [data.device_id,fromTime], (err, res) => {
     if (err) {
       console.log('Error retrieving data');
     } else {
@@ -163,8 +163,8 @@ function processLastSent(time, data, row) {
   if (time == 0) {
     query = INSERT_LAST_SEND;
   }
-  pool.query(query, [data.deviceid,
-  data.devicetype, sentTime], (err, res) => {
+  pool.query(query, [data.device_id,
+  data.device_type, sentTime], (err, res) => {
     if (err) {
       return console.log(err.message);
     } else {

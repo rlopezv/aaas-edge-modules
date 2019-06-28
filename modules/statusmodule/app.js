@@ -16,25 +16,25 @@ var _client;
 var _lastNotification;
 
 const ALERT_INSERT = `INSERT INTO alert (
-  application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime)
+  application, gateway, gateway_id, device, device_id, device_type, data, message,gw_time,edge_time)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`;
 
- const DATA_LAST_SELECT = `SELECT application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime 
- FROM status where deviceId = $1 ORDER BY  gwTime DESC limit 1`;
+ const DATA_LAST_SELECT = `SELECT application, gateway, gateway_id, device, device_id, device_type, data,gw_time,edge_time 
+ FROM status where device_id = $1 ORDER BY  gw_time DESC limit 1`;
  
  const UPDATE_LAST_SEND = `
  UPDATE auditupload set uploadtime = $3
- WHERE deviceId = $1 AND deviceType = $2`;
+ WHERE device_id = $1 AND device_type = $2`;
  
  const INSERT_LAST_SEND = `
- INSERT INTO auditupload (deviceId, deviceType, uploadtime)
+ INSERT INTO auditupload (device_id, device_type, uploadtime)
  VALUES ($1,$2,$3)`;
 
- const SELECT_LAST_SEND = `select status.deviceId as deviceId, MAX(auditupload.uploadtime) as uploadtime
+ const SELECT_LAST_SEND = `select status.device_id as device_id, MAX(auditupload.uploadtime) as uploadtime
  from status
  LEFT OUTER JOIN auditupload
-     ON auditupload.deviceId=status.deviceId 
-     AND auditupload.deviceType = 'STATUS'
+     ON auditupload.device_id=status.device_id 
+     AND auditupload.device_type = 'STATUS'
  group by 1`;
 
 var statusConf = {
@@ -138,7 +138,7 @@ function processLastMeasure(data) {
     fromTime = 0;
   }
 
-  pool.query(DATA_LAST_SELECT, [data.deviceid], (err, res) => {
+  pool.query(DATA_LAST_SELECT, [data.device_id], (err, res) => {
     if (err) {
       console.log('Error retrieving data');
     } else {
@@ -155,17 +155,17 @@ function buildResult(data,msg) {
   var result = {};
   result.application = data.application;
   result.gateway = data.gateway;
-  result.gatewayId = data.gatewayId?data.gatewayId:data.gatewayid;
+  result.gateway_id = data.gateway_id?data.gateway_id:data.gateway_id;
   result.device = data.device;
-  result.deviceId = data.deviceId?data.deviceId:data.deviceid;
-  result.deviceType = data.deviceType?data.deviceType:data.devicetype;
+  result.device_id = data.device_id?data.device_id:data.device_id;
+  result.device_type = data.device_type?data.device_type:data.device_type;
   result.data = data.data;
   result.message = msg;
   result.status = false;
-  if (data.gwtime) {
-    result.gatewayTime = data.gwtime;
+  if (data.gw_time) {
+    result.gateway_time = data.gw_time;
   } else {
-    result.gatewayTime = new Date(data.gatewayTime).getTime();
+    result.gateway_time = new Date(data.gateway_time).getTime();
   }
   return result;
 }
@@ -176,13 +176,13 @@ function processLastSent(time, data, row) {
   if (time == 0) {
     query = INSERT_LAST_SEND;
   }
-  pool.query(query, [data.deviceid,
+  pool.query(query, [data.device_id,
   'STATUS', sentTime], (err, res) => {
     if (err) {
       return console.log(err.message);
     } else {
       // get the last insert id
-      if (row && row.gwtime<time) {
+      if (row && row.gw_time<time) {
           var result = buildResult(row,"Device not reported");
           result.type = 'ALERT';
           var alertMsg = new Message(JSON.stringify(result));
@@ -232,16 +232,16 @@ function handleAlerts(content) {
 }
 
 function persistAlert(result) {
-  //application, gateway, gatewayId, device, deviceId, deviceType, data, message,gwTime,edgeTime
+  //application, gateway, gateway_id, device, device_id, device_type, data, message,gw_time,edge_time
   return pool.query(ALERT_INSERT, [result.application,
   result.gateway,
-  result.gatewayId,
+  result.gateway_id,
   result.device,
-  result.deviceId,
-  result.deviceType,
+  result.device_id,
+  result.device_type,
   JSON.stringify(result.data),
   result.message,
-  result.gatewayTime,
+  result.gateway_time,
   new Date().getTime()
 ], (err, res) => {
     if (err) {

@@ -27,13 +27,13 @@ const TELEMETRY_SCHEMA = `CREATE TABLE IF NOT EXISTS telemetry (
   id SERIAL NOT NULL PRIMARY KEY,
   application text NOT NULL,
   gateway text NOT NULL,
-  gatewayId text NOT NULL,
+  gateway_id text NOT NULL,
   device text NOT NULL,
-  deviceId text NOT NULL,
-  deviceType text NOT NULL,
+  device_id text NOT NULL,
+  device_type text NOT NULL,
   data text,
-  gwTime BIGINT NOT NULL,
-  edgeTime BIGINT NOT NULL
+  gw_time BIGINT NOT NULL,
+  edge_time BIGINT NOT NULL
 )`;
 
 //Table for alert messages table
@@ -41,20 +41,20 @@ const ALERT_SCHEMA = `CREATE TABLE IF NOT EXISTS alert (
   id SERIAL NOT NULL PRIMARY KEY,
   application text NOT NULL,
   gateway text NOT NULL,
-  gatewayId text NOT NULL,
+  gateway_id text NOT NULL,
   device text NOT NULL,
-  deviceId text NOT NULL,
-  deviceType text NOT NULL,
+  device_id text NOT NULL,
+  device_type text NOT NULL,
   data text,
   message text,
-  gwTime BIGINT NOT NULL,
-  edgeTime BIGINT NOT NULL
+  gw_time BIGINT NOT NULL,
+  edge_time BIGINT NOT NULL
 )`;
 
 //Table for sent messages table
 const AUDIT_SENT_SCHEMA = `CREATE TABLE IF NOT EXISTS auditupload (
-  deviceId text NOT NULL,
-  deviceType text NOT NULL,
+  device_id text NOT NULL,
+  device_type text NOT NULL,
   uploadTime BIGINT NOT NULL
 )`;
 
@@ -64,33 +64,33 @@ CREATE TABLE IF NOT EXISTS status (
   id SERIAL NOT NULL PRIMARY KEY,
   application text NOT NULL,
   gateway text NOT NULL,
-  gatewayId text NOT NULL,
+  gateway_id text NOT NULL,
   device text NOT NULL,
-  deviceId text NOT NULL,
-  deviceType text NOT NULL,
+  device_id text NOT NULL,
+  device_type text NOT NULL,
   data text,
   status boolean,
-  gwTime BIGINT NOT NULL,
-  edgeTime BIGINT NOT NULL
+  gw_time BIGINT NOT NULL,
+  edge_time BIGINT NOT NULL
 )`;
 
 const GATEWAY_SCHEMA = `CREATE TABLE IF NOT EXISTS gateway (
   id SERIAL NOT NULL PRIMARY KEY,
   application text NOT NULL,
   device text NOT NULL,
-  deviceId text NOT NULL,
+  device_id text NOT NULL,
   type text NOT NULL,
-  edgeTime BIGINT NOT NULL
+  edge_time BIGINT NOT NULL
 )`
 
 const STATUS_INSERT = `INSERT INTO status (
-  application, gateway, gatewayId, device, deviceId, deviceType, data, status,gwTime,edgeTime)
+  application, gateway, gateway_id, device, device_id, device_type, data, status,gw_time,edge_time)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`;
 const DATA_INSERT = `INSERT INTO telemetry (
-  application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime)
+  application, gateway, gateway_id, device, device_id, device_type, data,gw_time,edge_time)
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`;
 const JOIN_INSERT = `INSERT INTO gateway (
-  application,device,deviceId,type,edgeTime)
+  application,device,device_id,type,edge_time)
  VALUES ($1,$2,$3,$4,$5);`;
 
 var db;
@@ -178,10 +178,10 @@ function handleMessage(message) {
 
 //inserts join data
 function handleJoin(message) {
-  //application,device,deviceId,type,edgeTime
+  //application,device,device_id,type,edge_time
   return pool.query(JOIN_INSERT, [message.application,
   message.device,
-  message.deviceId,
+  message.device_id,
   message.type,
   new Date().getTime()], (err, res) => {
     if (err) {
@@ -196,15 +196,15 @@ function handleJoin(message) {
 
 //Inserts data event
 function handleData(message) {
-  //application, gateway, gatewayId, device, deviceId, deviceType, data,gwTime,edgeTime
+  //application, gateway, gateway_id, device, device_id, device_type, data,gw_time,edge_time
   return pool.query(DATA_INSERT, [message.application,
   message.gateway,
-  message.gatewayId,
+  message.gateway_id,
   message.device,
-  message.deviceId,
-  message.deviceType,
+  message.device_id,
+  message.device_type,
   JSON.stringify(message.data),
-  new Date(message.gatewayTime).getTime(),
+  new Date(message.gateway_time).getTime(),
   new Date().getTime()], (err, res) => {
     if (err) {
       return console.log(err.message);
@@ -212,7 +212,7 @@ function handleData(message) {
     // get the last insert id
     console.log(`Data has been inserted`);
     var outputMsg = new Message(JSON.stringify(message));
-    _client.sendOutputEvent(message.deviceType, outputMsg, printResultFor('Sending data message'));
+    _client.sendOutputEvent(message.device_type, outputMsg, printResultFor('Sending data message'));
   });
 }
 
@@ -220,13 +220,13 @@ function handleData(message) {
 function handleStatus(message) {
   return pool.query(STATUS_INSERT, [message.application,
   message.gateway,
-  message.gatewayId,
+  message.gateway_id,
   message.device,
-  message.deviceId,
-  message.deviceType,
+  message.device_id,
+  message.device_type,
   JSON.stringify(message.data),
   message.status,
-  new Date(message.gatewayTime).getTime(),
+  new Date(message.gateway_time).getTime(),
   new Date().getTime()], (err, res) => {
     if (err) {
       return console.log(err.message);
@@ -346,14 +346,14 @@ function getStatusInfo() {
   return { status: true, time: new Date().getTime() };
 }
 
-//{"command":"command","value":"value","deviceId":"ead31f10c9610e41"}
+//{"command":"command","value":"value","device_id":"ead31f10c9610e41"}
 function processCommand(request, response) {
   console.log('received command');
   var command = {};
   if (request.payload) {
     console.log('Payload:');
     console.dir(request.payload);
-    command.deviceId = request.payload.deviceId;
+    command.device_id = request.payload.device_id;
     command.command = request.payload.command;
     command.value = request.payload.value;
   }

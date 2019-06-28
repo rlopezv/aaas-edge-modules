@@ -99,7 +99,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "rlopezviana/aaas-edge-nodered:0.0.2-arm32v7",
+              "image": "rlopezviana/aaas-edge-nodered:0.2.0-arm32v7",
               "createOptions": {
                 "HostConfig": {
                   "Privileged": true,
@@ -222,6 +222,8 @@
       "properties.desired": {
         "schemaVersion": "1.0",
         "routes": {
+          "mesageDispatcherModuleToPremiumWeatherModule": "FROM /messages/modules/messagedispatchermodule/outputs/weather INTO BrokeredEndpoint(\"/modules/premiumweathermodule/inputs/data\")",
+          "mesageDispatcherModuleToPremiumPlantModule": "FROM /messages/modules/messagedispatchermodule/outputs/plant INTO BrokeredEndpoint(\"/modules/premiumplantmodule/inputs/data\")",
           "noderedToLogModule": "FROM /messages/modules/edgenodered/outputs/* INTO BrokeredEndpoint(\"/modules/SampleModule/inputs/input1\")",
           "logmoduleToIoTHub": "FROM /messages/modules/logmodule/outputs/* INTO $upstream",
           "plantmoduleToIoTHub": "FROM /messages/modules/plantmodule/outputs/* INTO $upstream",
@@ -229,7 +231,6 @@
           "messagedispatchermoduleToIoTHub": "FROM /messages/modules/messagedispatchermodule/outputs/* INTO $upstream",
           "weathermoduleToIoTHub": "FROM /messages/modules/weathermodule/outputs/* INTO $upstream",
           "weatherpremiummoduleToIoTHub": "FROM /messages/modules/weatherpremiummodule/outputs/* INTO $upstream",
-          "pgToIoTHub": "FROM /messages/modules/pg/outputs/* INTO $upstream",
           "premiumweathermoduleToIoTHub": "FROM /messages/modules/premiumweathermodule/outputs/* INTO $upstream",
           "statusmoduleToIoTHub": "FROM /messages/modules/statusmodule/outputs/* INTO $upstream"
         },
