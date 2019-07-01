@@ -120,6 +120,7 @@ function buildResult(data, msg) {
   result.data = data.data;
   result.message = msg;
   result.status = false;
+  result.edge_time = new Date().getTime();
   if (data.gw_time) {
     result.gateway_time = data.gw_time;
   } else {

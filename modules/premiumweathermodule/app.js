@@ -12,6 +12,12 @@ const pool = new Pool(poolConfig);
 
 var _job;
 var _client;
+
+var tempConf = {
+  MAX_TEMP : 30,
+  MIN_TEMP : 10
+}
+
 var zambrettiConf = {
   pressureUpper: 995,
   pressureLower: 1005,
@@ -219,7 +225,7 @@ Client.fromEnvironment(Transport, function (err, client) {
             console.error('Error getting twin: ' + err.message);
           } else {
             twin.on('properties.desired', function (delta) {
-              processTwinUpdate(twin,delta);
+              processTwinUpdate(twin, delta);
             });
           };
         });
@@ -234,7 +240,7 @@ Client.fromEnvironment(Transport, function (err, client) {
   }
 });
 
-function processTwinUpdate(twin,delta) {
+function processTwinUpdate(twin, delta) {
   console.log('processTwinUpdate');
   console.log(delta);
 }
@@ -262,7 +268,7 @@ function handleMessage(data) {
 function handleAlerts(content) {
   var result = {};
   if (content.data) {
-
+    processTemperature(content);
     processTrend(content);
     //z_hpa, z_month, z_wind, z_trend, z_hemisphere, z_upper, z_lower
 
@@ -283,9 +289,12 @@ function buildResult(data, msg) {
   result.status = false;
   if (data.gw_time) {
     result.gateway_time = data.gw_time;
-  } else {
+  } else if (data.gateway_time) {
     result.gateway_time = new Date(data.gateway_time).getTime();
+  } else {
+    result.gateway_time = new Date().getTime();
   }
+  result.edge_time = new Date().getTime();
   return result;
 }
 
@@ -308,6 +317,27 @@ function obtainTrend(current, previous) {
   return trend;
 }
 
+function processTemperature(content) {
+  if (content.data) {
+    var data = content.data;
+    if (data.temperature > tempConf.MAX_TEMP) {
+      var alertMessage = {};
+      alertMessage.message = 'Too Hot';
+    } else if (data.temperature < tempConf.MIN_TEMP) {
+      var alertMessage = {};
+      alertMessage.message = 'Too cold';
+    }
+    if (alertMessage) {
+      var result = buildResult(content, alertMessage.message);
+      console.log("publish alert message");
+      result.type = 'ALERT';
+      var outputMsg = new Message(JSON.stringify(result));
+      _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
+      persistAlert(result,alertMessage);
+    }
+  }
+}
+
 function processTrend(content) {
   pool.query(SELECT_LAST_MEASURE, [new Date(content.gateway_time).getTime(), content.device_id], (err, res) => {
     if (err) {
@@ -316,7 +346,7 @@ function processTrend(content) {
       if (res.rows && res.rows.length == 1) {
         var data = content.data;
         let trend = obtainTrend(data, res.rows[0]);
-        if (trend>0) {
+        if (trend > 0) {
           let forecast = processAlert(data.pressure, new Date().getTime(), zambrettiConf.defaultWind, trend, zambrettiConf.hemisphere, zambrettiConf.pressureUpper, zambrettiConf.pressureLower);
           if (forecast && forecast.length == 2) {
             var alertMessage = {};
@@ -324,17 +354,17 @@ function processTrend(content) {
             alertMessage.severity = forecast[1];
           }
           if (alertMessage.message) {
-            var result = buildResult(content,alertMessage.message);
+            var result = buildResult(content, alertMessage.message);
             result.type = 'ALERT';
             console.log("publish weather message");
             var outputMsg = new Message(JSON.stringify(result));
             _client.sendOutputEvent('alert', outputMsg, printResultFor('Sending alert message'));
-            persistAlert(result);
+            persistAlert(result,alertMessage);
           }
           console.log(result);
         }
-  
-        }
+
+      }
     }
   });
   //IMPLEMENT GET TREND
@@ -395,6 +425,7 @@ function processRemoteStatus(request, response) {
 function processRemoteConfig(request, response) {
   console.log('processConfigInvocation');
   var changed = false;
+  var changedConf;
   if (request.payload) {
     console.log('Request:' + JSON.stringify(request.payload));
     let content = request.payload;
@@ -406,14 +437,25 @@ function processRemoteConfig(request, response) {
           zambrettiConf[parm] = data[parm];
         }
       }
+      changedConf = zambrettiConf;
       reporTwinProperties({ zambrettiConf: zambrettiConf });
+    } else  if (content.tempConf) {
+      let data = content.tempConf;
+      for (const parm in tempConf) {
+        if (data[parm]) {
+          changed = changed || true;
+          tempConf[parm] = data[parm];
+        }
+      }
+      changedConf = tempConf;
+      reporTwinProperties({ tempConf: tempConf });
     }
   }
   var responseBody = {}
   var result = {}
   if (changed) {
     result.message = 'updated';
-    result.data = JSON.stringify({ newConf: zambrettiConf })
+    result.data = JSON.stringify({ newConf: changedConf })
   } else {
     result.message = 'no update';
   }
@@ -428,7 +470,7 @@ function processRemoteConfig(request, response) {
 }
 
 function getStatusInfo() {
-  return { status: true, time:new Date().getTime() };
+  return { status: true, time: new Date().getTime() };
 }
 
 function reporTwinProperties(patch) {
