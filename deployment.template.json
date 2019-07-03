@@ -99,7 +99,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "rlopezviana/aaas-edge-nodered:0.2.0-arm32v7",
+              "image": "rlopezviana/aaas-edge-nodered:1.0.3-arm32v7",
               "createOptions": {
                 "HostConfig": {
                   "Privileged": true,
@@ -130,7 +130,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "${MODULES.plantmodule.debug}",
+              "image": "${MODULES.plantmodule}",
               "createOptions": {
                 "HostConfig": {
                   "Privileged": true,
@@ -151,7 +151,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "${MODULES.premiumplantmodule.debug}",
+              "image": "${MODULES.premiumplantmodule}",
               "createOptions": {}
             }
           },
@@ -164,7 +164,7 @@
               "postgres"
             ],
             "settings": {
-              "image": "${MODULES.messagedispatchermodule.debug}",
+              "image": "${MODULES.messagedispatchermodule}",
               "createOptions": {
                 "HostConfig": {
                   "Privileged": true
@@ -178,7 +178,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "${MODULES.weathermodule.debug}",
+              "image": "${MODULES.weathermodule}",
               "createOptions": {}
             }
           },
@@ -188,7 +188,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "${MODULES.premiumweathermodule.debug}",
+              "image": "${MODULES.premiumweathermodule}",
               "createOptions": {
                 "ExposedPorts": {
                   "9229/tcp": {}

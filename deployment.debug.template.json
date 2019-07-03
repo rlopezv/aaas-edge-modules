@@ -104,7 +104,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "rlopezviana/aaas-edge-nodered:1.0.2-amd64",
+              "image": "rlopezviana/aaas-edge-nodered:1.0.3-amd64",
               "createOptions": {
                 "HostConfig": {
                   "Privileged": true,
