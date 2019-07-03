@@ -15,7 +15,7 @@ const poolConfig = {
 const pool = new Pool(poolConfig);
 
 const DATA_LAST_SELECT = `SELECT application, gateway, gateway_id, device, device_id, device_type, data,gw_time,edge_time 
-FROM telemetry where device_type = 'WEATHER' and gw_time > $2 and device_id = $1 ORDER BY  gw_time DESC limit 1`;
+FROM telemetry where device_type = 'WEATHER' and gw_time > $2 and device_id = $1 ORDER BY  gw_time DESC limit 20`;
 
 const UPDATE_LAST_SEND = `
 UPDATE auditupload set uploadtime = $3
@@ -35,6 +35,8 @@ group by 1,2`;
 const DEFAULT_SCHEDULING = '*/15 * * * *';
 
 var _scheduling;
+
+const EXCLUDED_PROPERTIES = ["gw_time","type","content"];
 
 Client.fromEnvironment(Transport, function (err, client) {
   if (err) {
@@ -128,23 +130,23 @@ function processLastMeasure(data) {
 
   var fromTime = data.uploadtime;
   if (!fromTime || fromTime == null) {
-    fromTime = 0;
+     fromTime = 0;
   }
 
   pool.query(DATA_LAST_SELECT, [data.device_id,fromTime], (err, res) => {
     if (err) {
       console.log('Error retrieving data');
     } else {
-      if (res.rows && res.rows.length == 1) {
-        processLastSent(fromTime,data, res.rows[0]);
-      } else {
-        processLastSent(fromTime,data);
-      }
+      if (res.rows && res.rows.length>0) {
+        processLastSent(fromTime,data, res.rows);
+    } else {
+        console.log("No data to send");
     }
-  });
+  }
+});
 }
 
-function processLastSent(time, data, row) {
+function processLastSent(time, data, rows) {
   var sentTime = new Date().getTime();
   var query = UPDATE_LAST_SEND;
   if (time == 0) {
@@ -156,13 +158,11 @@ function processLastSent(time, data, row) {
       return console.log(err.message);
     } else {
       // get the last insert id
-      
       console.log(`A row has been inserted`);
-      if (row) {
-      row.data = JSON.parse(row.data);
-      row.type = 'DATA';
-      var outputMsg = new Message(JSON.stringify(row));
-      _client.sendOutputEvent('weather', outputMsg, printResultFor('Sending last message'));
+      if (rows) {
+      var average = processRows(rows);
+      var outputMsg = new Message(JSON.stringify(average));
+      _client.sendOutputEvent('weather', outputMsg, printResultFor('Sending last summary'));
     } else {
       console.log('No data to send');
     }
@@ -172,21 +172,35 @@ function processLastSent(time, data, row) {
 }
 function processRows(data) {
   var result = {};
+  result.type = 'DATA';
+  result.edge_time = new Date().toISOString();
+  result.application = data[0].application;
+  result.gateway = data[0].gateway;
+  result.gateway_id = data[0].gateway_id;
+  result.device = data[0].device;
+  result.device_id = data[0].device_id;
+  result.device_type = data[0].device_type;
+  result.gateway_time = new Date().toISOString();
   if (data && Array.isArray(data) && data.length > 0) {
     var values = [];
-    for (const value of data) {
-      values.push(JSON.parse(value.data));
+    for (var datum of data) {
+      datum = JSON.parse(datum.data);
+      var element = {};
+      for (const key of Object.getOwnPropertyNames(datum)) {
+        if (EXCLUDED_PROPERTIES.indexOf(key)<0) {
+          element[key] = datum[key];
+        }
+      }
+      values.push(element);
     }
     var avg = summary(values);
-    result = JSON.parse(JSON.stringify(data[0]));
     result.data = {};
     for (const value of avg) {
       result.data[value.name] = value.average;
     }
-    result.avgTime = new Date().toISOString();
-    _jobLastInvocation = new Date();
-    var outputMsg = new Message(JSON.stringify(result));
-    _client.sendOutputEvent('output1', outputMsg, printResultFor("Scheduled Task executed"));
+    result.data.content = "data";
+    result.data.type = "WEATHER";
+    result.avg_time = new Date().toISOString();
   }
   return result;
 }

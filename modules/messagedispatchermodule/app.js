@@ -205,14 +205,14 @@ function handleData(message) {
   message.device_type,
   JSON.stringify(message.data),
   new Date(message.gateway_time).getTime(),
-  new Date().getTime()], (err, res) => {
+  new Date(message.edge_time).getTime()], (err, res) => {
     if (err) {
       return console.log(err.message);
     }
     // get the last insert id
     console.log(`Data has been inserted`);
     var outputMsg = new Message(JSON.stringify(message));
-    _client.sendOutputEvent(message.device_type, outputMsg, printResultFor('Sending data message'));
+    _client.sendOutputEvent(message.device_type.toLowerCase() , outputMsg, printResultFor('Sending data message'));
   });
 }
 
@@ -227,7 +227,7 @@ function handleStatus(message) {
   JSON.stringify(message.data),
   message.status,
   new Date(message.gateway_time).getTime(),
-  new Date().getTime()], (err, res) => {
+  new Date(message.edge_time).getTime()], (err, res) => {
     if (err) {
       return console.log(err.message);
     }

@@ -37,8 +37,12 @@ const ALERT_INSERT = `INSERT INTO alert (
      AND auditupload.device_type = 'STATUS'
  group by 1`;
 
+ const STATUS_INSERT = `INSERT INTO status (
+  application, gateway, gateway_id, device, device_id, device_type, data, status,gw_time,edge_time)
+ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`;
+
 var statusConf = {
-  NOTIFICATION_PERIOD: 1
+  ACTIVITY_PERIOD: 15
 }
 
 const DEFAULT_SCHEDULING = '*/15 * * * *';
@@ -97,6 +101,8 @@ function processTwinUpdate(twin, delta) {
       }
     }
   }
+  //
+
 }
 
 function processScheduling(exp) {
@@ -136,6 +142,8 @@ function processLastMeasure(data) {
   var fromTime = data.uploadtime;
   if (!fromTime || fromTime == null) {
     fromTime = 0;
+  } else {
+    fromTime = fromTime - statusConf.ACTIVITY_PERIOD;
   }
 
   pool.query(DATA_LAST_SELECT, [data.device_id], (err, res) => {
@@ -162,10 +170,11 @@ function buildResult(data,msg) {
   result.data = data.data;
   result.message = msg;
   result.status = false;
+  result.edge_time = new Date().toISOString();
   if (data.gw_time) {
-    result.gateway_time = data.gw_time;
-  } else {
-    result.gateway_time = new Date(data.gateway_time).getTime();
+      result.gateway_time = new Date(parseInt(data.gw_time)).toISOString();
+  } else if (data.gateway_time) {
+    result.gateway_time = data.gateway_time;
   }
   return result;
 }
@@ -187,9 +196,7 @@ function processLastSent(time, data, row) {
           result.type = 'ALERT';
           var alertMsg = new Message(JSON.stringify(result));
           _client.sendOutputEvent('alert', alertMsg, printResultFor('Sending alert message'));
-          result.type = 'STATUS';
-          var statusMsg = new Message(JSON.stringify(result));
-          _client.sendOutputEvent('status', statusMsg, printResultFor('Sending status message'));
+          handleStatus(result);
           persistAlert(result);
       } else {
         console.log('No data to send');
@@ -201,7 +208,7 @@ function processLastSent(time, data, row) {
 
 function processMessage(client, inputName, msg) {
   client.complete(msg, printResultFor('Receiving message'));
-  if (inputName === 'data') {
+  if (inputName === 'status') {
     var message = msg.getBytes().toString('utf8');
     if (message) {
       handleMessage(JSON.parse(message));
@@ -241,8 +248,8 @@ function persistAlert(result) {
   result.device_type,
   JSON.stringify(result.data),
   result.message,
-  result.gateway_time,
-  new Date().getTime()
+  new Date(result.gateway_time).getTime(),
+  new Date(result.edge_time).getTime()
 ], (err, res) => {
     if (err) {
       return console.log(err.message);
@@ -291,6 +298,9 @@ function processRemoteConfig(request, response) {
   if (content.scheduling) {
     processScheduling(content.scheduling);
   }
+  if (content.statusConf) {
+    processStatusConf(content.statusConf);
+  }
   var responseBody = {
     message: 'processed'
   };
@@ -303,8 +313,48 @@ function processRemoteConfig(request, response) {
   });
 }
 
+function processStatusConf(conf) {
+  let data = conf;
+  for (const parm in statusConf) {
+    if (data[parm]) {
+      statusConf[parm] = data[parm];
+      changed = true;
+    }
+  }
+  if (changed) {
+    reporTwinProperties({stausConf: statusConf});
+  }
+}
+
+//Inserts status event
+function handleStatus(message) {
+  
+  return pool.query(STATUS_INSERT, [message.application,
+  message.gateway,
+  message.gateway_id,
+  message.device,
+  message.device_id,
+  message.device_type,
+  JSON.stringify(message.data),
+  message.status,
+  new Date(message.gateway_time).getTime(),
+  new Date(message.gateway_time).getTime()], (err, res) => {
+    if (err) {
+      return console.log(err.message);
+    }
+    // get the last insert id
+    console.log(`Status been inserted`);
+    var outputMsg = new Message(JSON.stringify(message));
+    _client.sendOutputEvent('status', outputMsg, printResultFor('Sending status message'));
+  });
+
+}
+
 function getStatusInfo() {
-  return { status: true, time:new Date().getTime() };
+  return { status: true, 
+    time:new Date().getTime(),
+     statusConf: statusConf,
+     schedule: _scheduling };
 }
 
 function reporTwinProperties(patch) {
